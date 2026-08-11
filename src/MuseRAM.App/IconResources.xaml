@@ -1,0 +1,36 @@
+<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+  <!-- 24px Lucide-compatible outline geometries. Stroke is supplied by the consuming control. -->
+  <Geometry x:Key="IconDashboard">M3,3 L10,3 L10,10 L3,10 Z M14,3 L21,3 L21,10 L14,10 Z M3,14 L10,14 L10,21 L3,21 Z M14,14 L21,14 L21,21 L14,21 Z</Geometry>
+  <Geometry x:Key="IconActivity">M3,12 L7,12 L10,20 L14,4 L17,12 L21,12</Geometry>
+  <Geometry x:Key="IconShield">M12,22 C12,22 20,18 20,12 L20,5 L12,2 L4,5 L4,12 C4,18 12,22 12,22 Z</Geometry>
+  <Geometry x:Key="IconShieldPartial">M12,22 C12,22 20,18 20,12 L20,5 L12,2 L4,5 L4,12 C4,18 12,22 12,22 Z M8,12 L16,12</Geometry>
+  <Geometry x:Key="IconListChecks">M9,6 L21,6 M9,12 L21,12 M9,18 L21,18 M3,6 L4,7 L6,4 M3,12 L4,13 L6,10 M3,18 L4,19 L6,16</Geometry>
+  <Geometry x:Key="IconHistory">M3,12 A9,9 0 1 0 6,5.3 M3,3 L3,8 L8,8 M12,7 L12,12 L16,14</Geometry>
+  <Geometry x:Key="IconRefresh">M21,12 A9,9 0 0 1 5.8,18.5 M3,21 L3,15 L9,15 M3,12 A9,9 0 0 1 18.2,5.5 M21,3 L21,9 L15,9</Geometry>
+  <Geometry x:Key="IconSliders">M4,21 L4,14 M4,10 L4,3 M12,21 L12,12 M12,8 L12,3 M20,21 L20,16 M20,12 L20,3 M1,14 L7,14 M9,8 L15,8 M17,16 L23,16</Geometry>
+  <Geometry x:Key="IconSettings">M12,15.5 A3.5,3.5 0 1 0 12,8.5 A3.5,3.5 0 1 0 12,15.5 M19.4,15 A1.7,1.7 0 0 0 19.74,16.88 L19.8,16.94 L18.15,19.8 L18.07,19.77 A1.7,1.7 0 0 0 16.22,20.08 L16.11,20.15 L16.11,20.15 L12.8,20.15 L12.8,22 L11.2,22 L11.2,20.15 L7.89,20.15 L7.78,20.08 A1.7,1.7 0 0 0 5.93,19.77 L5.85,19.8 L4.2,16.94 L4.26,16.88 A1.7,1.7 0 0 0 4.6,15 L4.6,15 L2.8,15 L2.8,9 L4.6,9 A1.7,1.7 0 0 0 4.26,7.12 L4.2,7.06 L5.85,4.2 L5.93,4.23 A1.7,1.7 0 0 0 7.78,3.92 L7.89,3.85 L11.2,3.85 L11.2,2 L12.8,2 L12.8,3.85 L16.11,3.85 L16.22,3.92 A1.7,1.7 0 0 0 18.07,4.23 L18.15,4.2 L19.8,7.06 L19.74,7.12 A1.7,1.7 0 0 0 19.4,9 L21.2,9 L21.2,15 Z</Geometry>
+  <Geometry x:Key="IconShrink">M3,3 L10,10 M5,10 L10,10 L10,5 M21,3 L14,10 M14,5 L14,10 L19,10 M3,21 L10,14 M5,14 L10,14 L10,19 M21,21 L14,14 M14,19 L14,14 L19,14</Geometry>
+  <Geometry x:Key="IconExpand">M10,10 L3,3 M3,8 L3,3 L8,3 M14,10 L21,3 M16,3 L21,3 L21,8 M10,14 L3,21 M3,16 L3,21 L8,21 M14,14 L21,21 M16,21 L21,21 L21,16</Geometry>
+  <Geometry x:Key="IconSun">M12,3 L12,5 M12,19 L12,21 M4.22,4.22 L5.64,5.64 M18.36,18.36 L19.78,19.78 M3,12 L5,12 M19,12 L21,12 M4.22,19.78 L5.64,18.36 M18.36,5.64 L19.78,4.22 M16,12 A4,4 0 1 1 8,12 A4,4 0 1 1 16,12</Geometry>
+  <Geometry x:Key="IconMoon">M21,12.8 A8.5,8.5 0 1 1 11.2,3 A6.5,6.5 0 0 0 21,12.8 Z</Geometry>
+  <Geometry x:Key="IconMinimize">M5,12 L19,12</Geometry>
+  <Geometry x:Key="IconMaximize">M4,4 L20,4 L20,20 L4,20 Z</Geometry>
+  <Geometry x:Key="IconRestore">M8,8 L8,4 L20,4 L20,16 L16,16 M4,8 L16,8 L16,20 L4,20 Z</Geometry>
+  <Geometry x:Key="IconClose">M6,6 L18,18 M18,6 L6,18</Geometry>
+  <Geometry x:Key="IconChevronDown">M6,9 L12,15 L18,9</Geometry>
+  <Geometry x:Key="IconCircleCheck">M12,22 A10,10 0 1 0 12,2 A10,10 0 1 0 12,22 M8,12 L10.7,14.7 L16.5,8.9</Geometry>
+  <Geometry x:Key="IconLoaderCircle">M12,3 A9,9 0 1 1 5.64,5.64</Geometry>
+  <Geometry x:Key="IconClock">M12,22 A10,10 0 1 0 12,2 A10,10 0 1 0 12,22 M12,7 L12,12 L15.5,14</Geometry>
+  <Geometry x:Key="IconClock3">M12,22 A10,10 0 1 0 12,2 A10,10 0 1 0 12,22 M12,7 L12,12 L16,12</Geometry>
+  <Geometry x:Key="IconEye">M2,12 C4.5,7.5 8,5 12,5 C16,5 19.5,7.5 22,12 C19.5,16.5 16,19 12,19 C8,19 4.5,16.5 2,12 Z M15,12 A3,3 0 1 0 9,12 A3,3 0 1 0 15,12</Geometry>
+  <Geometry x:Key="IconCircleMinus">M12,22 A10,10 0 1 0 12,2 A10,10 0 1 0 12,22 M8,12 L16,12</Geometry>
+  <Geometry x:Key="IconCirclePause">M12,22 A10,10 0 1 0 12,2 A10,10 0 1 0 12,22 M10,9 L10,15 M14,9 L14,15</Geometry>
+  <Geometry x:Key="IconSparkle">M12,3 L13.7,8.3 L19,10 L13.7,11.7 L12,17 L10.3,11.7 L5,10 L10.3,8.3 Z</Geometry>
+  <Geometry x:Key="IconMoreHorizontal">M5,12 A1,1 0 1 0 5.01,12 M12,12 A1,1 0 1 0 12.01,12 M19,12 A1,1 0 1 0 19.01,12</Geometry>
+  <Geometry x:Key="IconZap">M13,2 L3,14 L12,14 L11,22 L21,10 L12,10 Z</Geometry>
+  <Geometry x:Key="IconTrash">M4,7 L20,7 M10,11 L10,17 M14,11 L14,17 M9,7 L9,4 L15,4 L15,7 M6,7 L7,21 L17,21 L18,7</Geometry>
+  <Geometry x:Key="IconFolderOpen">M3,19 L5,7 L10,7 L12,9 L20,9 L18,19 Z M3,19 L21,19</Geometry>
+  <Geometry x:Key="IconPlay">M8,5 L19,12 L8,19 Z</Geometry>
+  <Geometry x:Key="IconCircleHelp">M12,22 A10,10 0 1 0 12,2 A10,10 0 1 0 12,22 M9.5,9 A2.7,2.7 0 1 1 13.8,11.2 C13,11.8 12,12.2 12,14 M12,18 L12.01,18</Geometry>
+</ResourceDictionary>

@@ -1,0 +1,32 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <IsPackable>false</IsPackable>
+    <IsTestProject>true</IsTestProject>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="coverlet.collector" Version="6.0.0" />
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.8.0" />
+    <PackageReference Include="xunit" Version="2.5.3" />
+    <PackageReference Include="xunit.runner.visualstudio" Version="2.5.3" />
+  </ItemGroup>
+  <ItemGroup>
+    <Using Include="Xunit" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\MuseRAM.App\MuseRAM.App.csproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="..\..\src\MuseRAM.App\MainWindow.xaml" Link="Fixtures\MainWindow.xaml" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="..\..\src\MuseRAM.App\IconResources.xaml" Link="Fixtures\IconResources.xaml" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="..\..\src\MuseRAM.App\MainWindow.xaml.cs" Link="Fixtures\MainWindow.xaml.cs" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="..\..\src\MuseRAM.App\ExpansionMotion.cs" Link="Fixtures\ExpansionMotion.cs" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="..\..\src\MuseRAM.App\AppState.cs" Link="Fixtures\AppState.cs" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="..\..\src\MuseRAM.App\App.xaml.cs" Link="Fixtures\App.xaml.cs" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="..\..\src\MuseRAM.App\StartupThemedDialog.cs" Link="Fixtures\StartupThemedDialog.cs" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="..\..\src\MuseRAM.App\TrayMemoryIcon.cs" Link="Fixtures\TrayMemoryIcon.cs" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="..\..\src\MuseRAM.App\MuseRAM.App.csproj" Link="Fixtures\MuseRAM.App.csproj" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+</Project>

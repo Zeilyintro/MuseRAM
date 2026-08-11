@@ -1,0 +1,50 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 17
+VisualStudioVersion = 17.0.31903.59
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "src", "src", "{BD0413EE-B3C1-4425-89CF-EB5399664635}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "MuseRAM.Core", "src\MuseRAM.Core\MuseRAM.Core.csproj", "{417BB26D-3030-44AE-A2C0-2BB4B6AA800A}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "MuseRAM.App", "src\MuseRAM.App\MuseRAM.App.csproj", "{D67FE88E-A096-4A06-8FF3-F144C6D84CD1}"
+EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "tests", "tests", "{6AE15A15-B210-45BD-A1FC-129CD6AC96B7}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "MuseRAM.Core.Tests", "tests\MuseRAM.Core.Tests\MuseRAM.Core.Tests.csproj", "{5639946E-72CF-4C74-83B2-10B7B1D4911E}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "MuseRAM.App.Tests", "tests\MuseRAM.App.Tests\MuseRAM.App.Tests.csproj", "{A6B70F13-06D8-4622-93A4-B7B33B23981D}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{417BB26D-3030-44AE-A2C0-2BB4B6AA800A}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{417BB26D-3030-44AE-A2C0-2BB4B6AA800A}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{417BB26D-3030-44AE-A2C0-2BB4B6AA800A}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{417BB26D-3030-44AE-A2C0-2BB4B6AA800A}.Release|Any CPU.Build.0 = Release|Any CPU
+		{D67FE88E-A096-4A06-8FF3-F144C6D84CD1}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{D67FE88E-A096-4A06-8FF3-F144C6D84CD1}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{D67FE88E-A096-4A06-8FF3-F144C6D84CD1}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{D67FE88E-A096-4A06-8FF3-F144C6D84CD1}.Release|Any CPU.Build.0 = Release|Any CPU
+		{5639946E-72CF-4C74-83B2-10B7B1D4911E}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{5639946E-72CF-4C74-83B2-10B7B1D4911E}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{5639946E-72CF-4C74-83B2-10B7B1D4911E}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{5639946E-72CF-4C74-83B2-10B7B1D4911E}.Release|Any CPU.Build.0 = Release|Any CPU
+		{A6B70F13-06D8-4622-93A4-B7B33B23981D}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{A6B70F13-06D8-4622-93A4-B7B33B23981D}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{A6B70F13-06D8-4622-93A4-B7B33B23981D}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{A6B70F13-06D8-4622-93A4-B7B33B23981D}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(NestedProjects) = preSolution
+		{417BB26D-3030-44AE-A2C0-2BB4B6AA800A} = {BD0413EE-B3C1-4425-89CF-EB5399664635}
+		{D67FE88E-A096-4A06-8FF3-F144C6D84CD1} = {BD0413EE-B3C1-4425-89CF-EB5399664635}
+		{5639946E-72CF-4C74-83B2-10B7B1D4911E} = {6AE15A15-B210-45BD-A1FC-129CD6AC96B7}
+		{A6B70F13-06D8-4622-93A4-B7B33B23981D} = {6AE15A15-B210-45BD-A1FC-129CD6AC96B7}
+	EndGlobalSection
+EndGlobal

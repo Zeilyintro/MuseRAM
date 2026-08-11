@@ -1,0 +1,23 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <ItemGroup>
+    <ProjectReference Include="..\MuseRAM.Core\MuseRAM.Core.csproj" />
+    <Resource Include="Assets\MuseRAM.ico" />
+  </ItemGroup>
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <UseWPF>true</UseWPF>
+    <UseWindowsForms>true</UseWindowsForms>
+    <ApplicationHighDpiMode>PerMonitorV2</ApplicationHighDpiMode>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+    <ApplicationIcon>Assets\MuseRAM.ico</ApplicationIcon>
+    <AssemblyName>MuseRAM</AssemblyName>
+    <Product>MuseRAM</Product>
+    <Version>0.1.7</Version>
+  </PropertyGroup>
+
+</Project>
