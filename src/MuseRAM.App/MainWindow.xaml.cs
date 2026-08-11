@@ -875,7 +875,8 @@ public partial class MainWindow : Window
             IdleScoreDetail = TF("IdleScoreDetailFormat", targetFamily.IdleScore, targetFamily.Processes.Count)
         };
         if (row.RetentionIcon == RetentionStatusIcon.None &&
-            string.Equals(row.IdleStatus, T("ActivityObserving"), StringComparison.Ordinal))
+            (string.Equals(row.IdleStatus, T("ActivityObserving"), StringComparison.Ordinal) ||
+             string.Equals(row.IdleStatus, T("ActivityMinimized"), StringComparison.Ordinal)))
         {
             row = row with { RetentionIcon = RetentionStatusIcon.ActivityObserving };
         }

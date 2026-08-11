@@ -2454,6 +2454,7 @@ public sealed class MainWindowLayoutContractTests
         Assert.Contains("RetentionStatusIcon.Observing", layout);
         Assert.Contains("x:Name=\"ActivityObservingIcon\"", layout);
         Assert.Contains("RetentionStatusIcon.ActivityObserving", layout);
+        Assert.Contains("string.Equals(row.IdleStatus, T(\"ActivityMinimized\"), StringComparison.Ordinal)", code);
         Assert.Contains("row = row with { RetentionIcon = RetentionStatusIcon.ActivityObserving };", code);
         Assert.Contains("IconEye", resources);
         Assert.Contains("ProcessRetentionIndicator.AutomaticBackoff => RetentionStatusIcon.Backoff", code);
@@ -3379,7 +3380,7 @@ public sealed class MainWindowLayoutContractTests
     {
         var project = XDocument.Load(ProjectFixturePath());
 
-        Assert.Equal("0.1.7", project.Descendants("Version").Single().Value);
+        Assert.Equal("0.1.7.1", project.Descendants("Version").Single().Value);
     }
 
     [Fact]

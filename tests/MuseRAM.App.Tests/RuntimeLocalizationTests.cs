@@ -9,7 +9,7 @@ public sealed class RuntimeLocalizationTests
     [InlineData(UiLanguage.English)]
     public void CurrentVersionTextMatchesApplicationVersion(UiLanguage language)
     {
-        Assert.Contains("0.1.7", UiTextCatalog.For(language)["CurrentVersion"]);
+        Assert.Contains("0.1.7.1", UiTextCatalog.For(language)["CurrentVersion"]);
     }
 
     [Theory]
