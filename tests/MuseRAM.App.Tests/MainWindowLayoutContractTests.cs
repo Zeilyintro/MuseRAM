@@ -2617,10 +2617,12 @@ public sealed class MainWindowLayoutContractTests
             "private void RefreshBenefitLearningAnalysis");
 
         Assert.Contains("x:Name=\"ProtectionSuggestionShimmer\"", layout);
-        Assert.Contains("x:Name=\"ProtectionSuggestionShimmerStart\" Color=\"#00000000\" Offset=\"0.38\"", layout);
-        Assert.Contains("x:Name=\"ProtectionSuggestionShimmerEnd\" Color=\"#00000000\" Offset=\"0.62\"", layout);
+        Assert.Contains("<TextBlock.OpacityMask>", layout);
+        Assert.Contains("x:Name=\"ProtectionSuggestionShimmerStart\" Color=\"#00FFFFFF\" Offset=\"0.38\"", layout);
+        Assert.Contains("x:Name=\"ProtectionSuggestionShimmerEnd\" Color=\"#00FFFFFF\" Offset=\"0.62\"", layout);
         Assert.Contains("RepeatBehavior = System.Windows.Media.Animation.RepeatBehavior.Forever", code);
         Assert.Contains("ProtectionSuggestionShimmerTransform.BeginAnimation(", code);
+        Assert.Contains("Duration = TimeSpan.FromSeconds(2.8)", code);
         Assert.Contains("ProtectionSuggestionButtonText.Opacity = 0.55", code);
         Assert.Contains("ProtectionSuggestionButtonText.Opacity = 1", code);
         Assert.Contains("NavigateToHistoryAnalysis(\"Learning\")", click);

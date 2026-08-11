@@ -1628,17 +1628,18 @@
                                  Foreground="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}"
                                  FontWeight="SemiBold" TextTrimming="CharacterEllipsis" />
                       <TextBlock x:Name="ProtectionSuggestionShimmer" Text="{Binding Text, ElementName=ProtectionSuggestionButtonText}"
+                                 Foreground="{DynamicResource TextBrush}"
                                  FontWeight="SemiBold" TextTrimming="CharacterEllipsis" Opacity="0" IsHitTestVisible="False">
-                        <TextBlock.Foreground>
+                        <TextBlock.OpacityMask>
                           <LinearGradientBrush StartPoint="0,0.5" EndPoint="1,0.5">
                             <LinearGradientBrush.RelativeTransform>
                               <TranslateTransform x:Name="ProtectionSuggestionShimmerTransform" X="-1.2" />
                             </LinearGradientBrush.RelativeTransform>
-                            <GradientStop x:Name="ProtectionSuggestionShimmerStart" Color="#00000000" Offset="0.38" />
-                            <GradientStop x:Name="ProtectionSuggestionShimmerCenter" Color="#E6000000" Offset="0.5" />
-                            <GradientStop x:Name="ProtectionSuggestionShimmerEnd" Color="#00000000" Offset="0.62" />
+                            <GradientStop x:Name="ProtectionSuggestionShimmerStart" Color="#00FFFFFF" Offset="0.38" />
+                            <GradientStop x:Name="ProtectionSuggestionShimmerCenter" Color="#FFFFFFFF" Offset="0.5" />
+                            <GradientStop x:Name="ProtectionSuggestionShimmerEnd" Color="#00FFFFFF" Offset="0.62" />
                           </LinearGradientBrush>
-                        </TextBlock.Foreground>
+                        </TextBlock.OpacityMask>
                       </TextBlock>
                     </Grid>
                   </Button>

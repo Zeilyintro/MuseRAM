@@ -7826,8 +7826,8 @@ public partial class MainWindow : Window
         {
             From = -1.2,
             To = 1.2,
-            Duration = TimeSpan.FromSeconds(1.8),
-            BeginTime = TimeSpan.FromSeconds(0.45),
+            Duration = TimeSpan.FromSeconds(2.8),
+            BeginTime = TimeSpan.FromSeconds(0.8),
             RepeatBehavior = System.Windows.Media.Animation.RepeatBehavior.Forever
         };
 
@@ -9028,11 +9028,6 @@ public partial class MainWindow : Window
         SetBrush("LiteBrush", light ? "#15803D" : "#4ADE80");
         SetBrush("TurboBrush", light ? "#B45309" : "#D6A13A");
         SetBrush("UltimateBrush", light ? "#B91C1C" : "#F87171");
-        var shimmerColor = (System.Windows.Media.Color)System.Windows.Media.ColorConverter.ConvertFromString(
-            light ? "#E618181B" : "#F2FFFFFF");
-        ProtectionSuggestionShimmerStart.Color = System.Windows.Media.Color.FromArgb(0, shimmerColor.R, shimmerColor.G, shimmerColor.B);
-        ProtectionSuggestionShimmerCenter.Color = shimmerColor;
-        ProtectionSuggestionShimmerEnd.Color = System.Windows.Media.Color.FromArgb(0, shimmerColor.R, shimmerColor.G, shimmerColor.B);
         var themeIcon = light ? "\uE706" : "\uE708";
         var toggleThemeResourceKey = light ? "ToggleToDarkTheme" : "ToggleToLightTheme";
         var themeGeometry = (Geometry)FindResource(light ? "IconSun" : "IconMoon");
