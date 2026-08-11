@@ -659,6 +659,7 @@ public sealed class MainWindowLayoutContractTests
         Assert.Contains("Property=\"Background\" Value=\"Transparent\"", style);
         Assert.Contains("Property=\"BorderThickness\" Value=\"0\"", style);
         Assert.Contains("Property=\"FontWeight\" Value=\"SemiBold\"", style);
+        Assert.Contains("Property=\"Foreground\" Value=\"{DynamicResource TextBrush}\"", style);
     }
 
     [Fact]
@@ -2617,6 +2618,7 @@ public sealed class MainWindowLayoutContractTests
 
         Assert.Contains("x:Name=\"ProtectionSuggestionShimmer\"", layout);
         Assert.Contains("RepeatBehavior = System.Windows.Media.Animation.RepeatBehavior.Forever", code);
+        Assert.Contains("ProtectionSuggestionShimmerTransform.BeginAnimation(", code);
         Assert.Contains("NavigateToHistoryAnalysis(\"Learning\")", click);
         Assert.Contains("_dismissedSuggestionIds.Add(suggestion.SuggestionId)", markViewed);
         Assert.Contains("SaveBenefitLearning()", markViewed);
@@ -2624,6 +2626,19 @@ public sealed class MainWindowLayoutContractTests
         Assert.Contains("ShowProtectionSuggestionsDialog(suggestions)", review);
         Assert.Contains("IsEnabled = suggested", code);
         Assert.Contains("ProtectEntireSuggestedFamily", code);
+    }
+
+    [Fact]
+    public void SettingsShowsVersionSummaryAtTheBottomOfTheLeftColumn()
+    {
+        var layout = File.ReadAllText(FixturePath());
+        var settingsStart = layout.IndexOf("<Grid x:Name=\"SettingsPage\"", StringComparison.Ordinal);
+        Assert.True(settingsStart >= 0);
+
+        var settings = layout[settingsStart..];
+        Assert.Contains("<StackPanel Grid.Row=\"2\" Margin=\"14,18,14,8\">", settings);
+        Assert.Equal(1, CountOccurrences(settings, "Text=\"{DynamicResource CurrentVersion}\""));
+        Assert.Contains("Text=\"{DynamicResource Tagline}\" Style=\"{StaticResource CaptionStyle}\"", settings);
     }
 
     [Fact]
@@ -3380,7 +3395,7 @@ public sealed class MainWindowLayoutContractTests
     {
         var project = XDocument.Load(ProjectFixturePath());
 
-        Assert.Equal("0.1.7.1", project.Descendants("Version").Single().Value);
+        Assert.Equal("0.1.7.2", project.Descendants("Version").Single().Value);
     }
 
     [Fact]

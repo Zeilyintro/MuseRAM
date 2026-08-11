@@ -89,7 +89,6 @@ public partial class MainWindow : Window
     private string? _updateShimmerDismissedVersion;
     private bool _updateCheckInProgress;
     private bool _automaticUpdatePromptShown;
-    private System.Windows.Media.Animation.Storyboard? _protectionSuggestionShimmerStoryboard;
     private bool _protectionSuggestionShimmerActive;
     private IReadOnlyDictionary<string, BackgroundActivity> _activity =
         new Dictionary<string, BackgroundActivity>();
@@ -7824,34 +7823,28 @@ public partial class MainWindow : Window
     private void StartProtectionSuggestionShimmer()
     {
         if (_protectionSuggestionShimmerActive) return;
-        if (_protectionSuggestionShimmerStoryboard is null)
+        var animation = new System.Windows.Media.Animation.DoubleAnimation
         {
-            var animation = new System.Windows.Media.Animation.DoubleAnimation
-            {
-                From = -1.4,
-                To = 1.4,
-                Duration = TimeSpan.FromSeconds(2.4),
-                BeginTime = TimeSpan.FromSeconds(0.35),
-                RepeatBehavior = System.Windows.Media.Animation.RepeatBehavior.Forever
-            };
-            System.Windows.Media.Animation.Storyboard.SetTarget(
-                animation,
-                ProtectionSuggestionShimmerTransform);
-            System.Windows.Media.Animation.Storyboard.SetTargetProperty(
-                animation,
-                new PropertyPath(System.Windows.Media.TranslateTransform.XProperty));
-            _protectionSuggestionShimmerStoryboard = new System.Windows.Media.Animation.Storyboard();
-            _protectionSuggestionShimmerStoryboard.Children.Add(animation);
-        }
+            From = -1.4,
+            To = 1.4,
+            Duration = TimeSpan.FromSeconds(2.4),
+            BeginTime = TimeSpan.FromSeconds(0.35),
+            RepeatBehavior = System.Windows.Media.Animation.RepeatBehavior.Forever
+        };
 
         ProtectionSuggestionShimmer.Opacity = 1;
-        _protectionSuggestionShimmerStoryboard.Begin(this, true);
+        ProtectionSuggestionShimmerTransform.BeginAnimation(
+            System.Windows.Media.TranslateTransform.XProperty,
+            animation,
+            System.Windows.Media.Animation.HandoffBehavior.SnapshotAndReplace);
         _protectionSuggestionShimmerActive = true;
     }
 
     private void StopProtectionSuggestionShimmer()
     {
-        _protectionSuggestionShimmerStoryboard?.Remove(this);
+        ProtectionSuggestionShimmerTransform.BeginAnimation(
+            System.Windows.Media.TranslateTransform.XProperty,
+            null);
         ProtectionSuggestionShimmerTransform.X = -1.4;
         ProtectionSuggestionShimmer.Opacity = 0;
         _protectionSuggestionShimmerActive = false;
@@ -9035,6 +9028,11 @@ public partial class MainWindow : Window
         SetBrush("LiteBrush", light ? "#15803D" : "#4ADE80");
         SetBrush("TurboBrush", light ? "#B45309" : "#D6A13A");
         SetBrush("UltimateBrush", light ? "#B91C1C" : "#F87171");
+        var shimmerColor = (System.Windows.Media.Color)System.Windows.Media.ColorConverter.ConvertFromString(
+            light ? "#6618181B" : "#99FFFFFF");
+        ProtectionSuggestionShimmerStart.Color = System.Windows.Media.Color.FromArgb(0, shimmerColor.R, shimmerColor.G, shimmerColor.B);
+        ProtectionSuggestionShimmerCenter.Color = shimmerColor;
+        ProtectionSuggestionShimmerEnd.Color = System.Windows.Media.Color.FromArgb(0, shimmerColor.R, shimmerColor.G, shimmerColor.B);
         var themeIcon = light ? "\uE706" : "\uE708";
         var toggleThemeResourceKey = light ? "ToggleToDarkTheme" : "ToggleToLightTheme";
         var themeGeometry = (Geometry)FindResource(light ? "IconSun" : "IconMoon");

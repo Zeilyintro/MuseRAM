@@ -429,7 +429,7 @@
     </Style>
     <Style x:Key="ProtectionSuggestionButtonStyle" TargetType="Button">
       <Setter Property="Padding" Value="0" />
-      <Setter Property="Foreground" Value="{DynamicResource AccentBrush}" />
+      <Setter Property="Foreground" Value="{DynamicResource TextBrush}" />
       <Setter Property="Background" Value="Transparent" />
       <Setter Property="BorderThickness" Value="0" />
       <Setter Property="FontWeight" Value="SemiBold" />
@@ -1634,9 +1634,9 @@
                             <LinearGradientBrush.RelativeTransform>
                               <TranslateTransform x:Name="ProtectionSuggestionShimmerTransform" X="-1.4" />
                             </LinearGradientBrush.RelativeTransform>
-                            <GradientStop Color="#00FFFFFF" Offset="0.34" />
-                            <GradientStop Color="#BFFFFFFF" Offset="0.5" />
-                            <GradientStop Color="#00FFFFFF" Offset="0.66" />
+                            <GradientStop x:Name="ProtectionSuggestionShimmerStart" Color="#00000000" Offset="0.34" />
+                            <GradientStop x:Name="ProtectionSuggestionShimmerCenter" Color="#66000000" Offset="0.5" />
+                            <GradientStop x:Name="ProtectionSuggestionShimmerEnd" Color="#00000000" Offset="0.66" />
                           </LinearGradientBrush>
                         </TextBlock.Foreground>
                       </TextBlock>
@@ -2616,7 +2616,9 @@
             <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
             <Grid Margin="0,0,8,0">
               <Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="16"/><ColumnDefinition/></Grid.ColumnDefinitions>
-              <Border Grid.Column="0" Style="{StaticResource CardStyle}" VerticalAlignment="Top">
+              <Grid Grid.Column="0">
+                <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="*"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
+              <Border Grid.Row="0" Style="{StaticResource CardStyle}" VerticalAlignment="Top">
               <StackPanel>
                 <TextBlock Text="{DynamicResource OptimizationStrategy}" FontSize="18" FontWeight="SemiBold" />
                 <TextBlock Text="{DynamicResource ExtremeSafety}" Style="{StaticResource CaptionStyle}" Margin="0,4,0,16" />
@@ -2713,11 +2715,15 @@
                 </Border>
               </StackPanel>
             </Border>
+                <StackPanel Grid.Row="2" Margin="14,18,14,8">
+                  <TextBlock Text="{DynamicResource CurrentVersion}" FontWeight="SemiBold" />
+                  <TextBlock Text="{DynamicResource Tagline}" Style="{StaticResource CaptionStyle}" Margin="0,4,0,0" TextWrapping="Wrap" />
+                </StackPanel>
+              </Grid>
               <Border Grid.Column="2" Style="{StaticResource CardStyle}" VerticalAlignment="Top">
               <StackPanel>
                 <TextBlock Text="{DynamicResource AppearanceMaintenance}" FontSize="18" FontWeight="SemiBold" />
-                <TextBlock Text="{DynamicResource CurrentVersion}" Style="{StaticResource CaptionStyle}" Margin="0,4,0,12" />
-                <Border Style="{StaticResource SettingToggleRowStyle}">
+                <Border Style="{StaticResource SettingToggleRowStyle}" Margin="0,12,0,0">
                   <Grid>
                     <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
                     <TextBlock Text="{DynamicResource FollowSystemTheme}" FontWeight="SemiBold" VerticalAlignment="Center" />
