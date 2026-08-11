@@ -3399,7 +3399,7 @@ public sealed class MainWindowLayoutContractTests
     {
         var project = XDocument.Load(ProjectFixturePath());
 
-        Assert.Equal("0.1.7.3", project.Descendants("Version").Single().Value);
+        Assert.Equal("0.1.7.4", project.Descendants("Version").Single().Value);
     }
 
     [Fact]
