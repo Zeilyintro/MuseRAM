@@ -2431,7 +2431,7 @@ public sealed class ApplicationReboundBackoffTrackerTests
             new[] { Snapshot(203 * mib) }, now + TimeSpan.FromMinutes(25), settings);
         var firstReview = tracker.FamilyStableLearningRecords.Single();
         Assert.Equal(2, firstReview.StableWorkingSetSamplesBytes.Count);
-        Assert.Equal(1, firstReview.HistoricalReviewSuccessCount);
+        Assert.Equal(0, firstReview.HistoricalReviewSuccessCount);
         Assert.Equal(now + TimeSpan.FromMinutes(38), Assert.IsType<NaturalStableReviewSchedule>(
             tracker.GetNaturalStableReviewSchedule("app", new[] { componentKey }, settings)).NextReviewAt);
 
@@ -2449,7 +2449,7 @@ public sealed class ApplicationReboundBackoffTrackerTests
             new[] { Snapshot(204 * mib) }, now + TimeSpan.FromMinutes(45), settings);
         var rolled = tracker.FamilyStableLearningRecords.Single();
         Assert.Equal(2, rolled.StableWorkingSetSamplesBytes.Count);
-        Assert.Equal(2, rolled.HistoricalReviewSuccessCount);
+        Assert.Equal(0, rolled.HistoricalReviewSuccessCount);
         Assert.Equal(0, rolled.LastStableLaunchSampleCount);
         Assert.DoesNotContain(202 * mib, rolled.StableWorkingSetSamplesBytes);
         Assert.Equal(now + TimeSpan.FromMinutes(43), rolled.StableLastObservedAt);
@@ -2578,6 +2578,47 @@ public sealed class ApplicationReboundBackoffTrackerTests
 
         Assert.Equal(now + TimeSpan.FromMinutes(expectedMinutes), schedule.NextReviewAt);
         Assert.Equal(completedReviews, schedule.CompletedReviewCount);
+    }
+
+    [Fact]
+    public void PendingClusterCannotRetainHistoricalReviewProgressAndKeepsFifteenMinuteSchedule()
+    {
+        const long mib = 1024L * 1024;
+        const string componentKey = "app|component:main";
+        var now = DateTimeOffset.UtcNow;
+        var pendingSamples = Enumerable.Range(0, 3)
+            .Select(index => new ApplicationStableSample(
+                (200 + index) * mib,
+                now - TimeSpan.FromMinutes(30 - index * 15),
+                "launch-1",
+                $"passive:launch-1:{index}",
+                Generation: 0,
+                PendingHigh: false))
+            .ToArray();
+        var record = new ApplicationStableLearningRecord(
+            "app", pendingSamples.Select(sample => sample.WorkingSetBytes).ToArray(),
+            now, "launch-1")
+        {
+            ComponentKeys = new[] { componentKey },
+            ModelVersion = StableStateSuppressionPolicy.NaturalStableStateModelVersion,
+            StableSamples = pendingSamples,
+            AnchorGeneration = 0,
+            AnchorGenerationBaselineBytes = 0,
+            HistoricalReviewSuccessCount = 3,
+            HistoricalReviewScheduleVersion = 2
+        };
+
+        var tracker = new ApplicationReboundBackoffTracker(
+            Array.Empty<ApplicationBenefitLearningRecord>(), now, new[] { record });
+        var migrated = Assert.Single(tracker.FamilyStableLearningRecords);
+
+        Assert.Equal(0, migrated.HistoricalReviewSuccessCount);
+        Assert.Equal(2, migrated.HistoricalReviewScheduleVersion);
+        var schedule = Assert.IsType<NaturalStableReviewSchedule>(tracker.GetNaturalStableReviewSchedule(
+            "app", new[] { componentKey },
+            StableStateSuppressionSettings.For(OptimizationProfile.Turbo)));
+        Assert.Equal(0, schedule.CompletedReviewCount);
+        Assert.Equal(now + TimeSpan.FromMinutes(15), schedule.NextReviewAt);
     }
 
     [Fact]

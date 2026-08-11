@@ -2716,7 +2716,10 @@
               </StackPanel>
             </Border>
                 <StackPanel Grid.Row="2" Margin="14,18,14,8">
-                  <TextBlock Text="{DynamicResource CurrentVersion}" FontWeight="SemiBold" />
+                  <StackPanel Orientation="Horizontal">
+                    <TextBlock Text="{DynamicResource CurrentVersion}" FontWeight="SemiBold" />
+                    <TextBlock x:Name="LatestVersionText" Margin="16,0,0,0" FontWeight="SemiBold" />
+                  </StackPanel>
                   <TextBlock Text="{DynamicResource Tagline}" Style="{StaticResource CaptionStyle}" Margin="0,4,0,0" TextWrapping="Wrap" />
                 </StackPanel>
               </Grid>

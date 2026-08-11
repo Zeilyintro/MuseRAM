@@ -2638,7 +2638,9 @@ public sealed class MainWindowLayoutContractTests
         var settings = layout[settingsStart..];
         Assert.Contains("<StackPanel Grid.Row=\"2\" Margin=\"14,18,14,8\">", settings);
         Assert.Equal(1, CountOccurrences(settings, "Text=\"{DynamicResource CurrentVersion}\""));
+        Assert.Contains("x:Name=\"LatestVersionText\"", settings);
         Assert.Contains("Text=\"{DynamicResource Tagline}\" Style=\"{StaticResource CaptionStyle}\"", settings);
+        Assert.Contains("(_availableUpdate?.Version ?? AppVersion.Current).ToString()", File.ReadAllText(CodeFixturePath()));
     }
 
     [Fact]
@@ -3395,7 +3397,7 @@ public sealed class MainWindowLayoutContractTests
     {
         var project = XDocument.Load(ProjectFixturePath());
 
-        Assert.Equal("0.1.7.2", project.Descendants("Version").Single().Value);
+        Assert.Equal("0.1.7.3", project.Descendants("Version").Single().Value);
     }
 
     [Fact]

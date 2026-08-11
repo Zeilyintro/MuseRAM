@@ -7767,6 +7767,9 @@ public partial class MainWindow : Window
 
     private void RefreshOverviewAttention(int? protectionFamilyCount = null)
     {
+        LatestVersionText.Text = TF(
+            "LatestVersionFormat",
+            (_availableUpdate?.Version ?? AppVersion.Current).ToString());
         var familyCount = protectionFamilyCount ?? _currentProtectionSuggestions
             .Select(suggestion => suggestion.FamilyKey)
             .Distinct(StringComparer.OrdinalIgnoreCase)

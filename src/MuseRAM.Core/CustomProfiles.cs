@@ -633,7 +633,9 @@ public sealed class ApplicationReboundBackoffTracker
         }
 
         settings = settings.Normalize();
-        var completedReviews = Math.Clamp(record.HistoricalReviewSuccessCount, 0, 3);
+        var completedReviews = StableAnchorLearningPolicy.AcceptedSampleCount(record) > 0
+            ? Math.Clamp(record.HistoricalReviewSuccessCount, 0, 3)
+            : 0;
         var highMigrationCycles = StableAnchorLearningPolicy.PendingHighRecoveryCycleCount(record);
         return new NaturalStableReviewSchedule(
             lastObservedAt + NaturalStableReviewInterval(completedReviews),
@@ -1019,7 +1021,10 @@ public sealed class ApplicationReboundBackoffTracker
                     StableWorkingSetLearningPolicy.MaximumRecentSamples),
                 0,
                 MaximumStableSamplesPerLaunch);
-            var reviewSuccessCount = record.HistoricalReviewScheduleVersion switch
+            var hasAcceptedAnchor = StableAnchorLearningPolicy.AcceptedSampleCount(normalized) > 0;
+            var reviewSuccessCount = !hasAcceptedAnchor
+                ? 0
+                : record.HistoricalReviewScheduleVersion switch
             {
                 >= 2 => Math.Clamp(record.HistoricalReviewSuccessCount, 0, 3),
                 1 => Math.Min(
@@ -2250,8 +2255,12 @@ public sealed class ApplicationReboundBackoffTracker
             maximumStableSamplePool);
         var anchorGenerationChanged = previous is not null &&
                                       committed.AnchorGeneration != previous.AnchorGeneration;
-        var committedSampleIsPendingHigh = committed.StableSamples.Any(sample =>
-            sample.ObservedAt == now && sample.PendingHigh);
+        var committedSampleIsAccepted = committed.AnchorGeneration > 0 &&
+                                        committed.AnchorGenerationBaselineBytes > 0 &&
+                                        committed.StableSamples.Any(sample =>
+                                            sample.ObservedAt == now &&
+                                            sample.Generation == committed.AnchorGeneration &&
+                                            !sample.PendingHigh);
         var updated = committed with
         {
             FamilyKey = snapshot.FamilyKey,
@@ -2267,9 +2276,9 @@ public sealed class ApplicationReboundBackoffTracker
                 0,
                 maximumSamplesPerLaunch),
             HistoricalReviewSuccessCount = historicalReview && !anchorGenerationChanged
-                ? committedSampleIsPendingHigh
-                    ? Math.Clamp(previous?.HistoricalReviewSuccessCount ?? 0, 0, 3)
-                    : Math.Clamp((previous?.HistoricalReviewSuccessCount ?? 0) + 1, 0, 3)
+                ? committedSampleIsAccepted
+                    ? Math.Clamp((previous?.HistoricalReviewSuccessCount ?? 0) + 1, 0, 3)
+                    : Math.Clamp(previous?.HistoricalReviewSuccessCount ?? 0, 0, 3)
                 : 0,
             HistoricalReviewScheduleVersion = 2
         };
