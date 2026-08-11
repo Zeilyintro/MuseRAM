@@ -1634,9 +1634,9 @@
                             <LinearGradientBrush.RelativeTransform>
                               <TranslateTransform x:Name="ProtectionSuggestionShimmerTransform" X="-1.2" />
                             </LinearGradientBrush.RelativeTransform>
-                            <GradientStop x:Name="ProtectionSuggestionShimmerStart" Color="#00000000" Offset="0.18" />
+                            <GradientStop x:Name="ProtectionSuggestionShimmerStart" Color="#00000000" Offset="0.38" />
                             <GradientStop x:Name="ProtectionSuggestionShimmerCenter" Color="#E6000000" Offset="0.5" />
-                            <GradientStop x:Name="ProtectionSuggestionShimmerEnd" Color="#00000000" Offset="0.82" />
+                            <GradientStop x:Name="ProtectionSuggestionShimmerEnd" Color="#00000000" Offset="0.62" />
                           </LinearGradientBrush>
                         </TextBlock.Foreground>
                       </TextBlock>

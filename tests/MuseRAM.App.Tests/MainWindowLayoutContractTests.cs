@@ -2617,6 +2617,8 @@ public sealed class MainWindowLayoutContractTests
             "private void RefreshBenefitLearningAnalysis");
 
         Assert.Contains("x:Name=\"ProtectionSuggestionShimmer\"", layout);
+        Assert.Contains("x:Name=\"ProtectionSuggestionShimmerStart\" Color=\"#00000000\" Offset=\"0.38\"", layout);
+        Assert.Contains("x:Name=\"ProtectionSuggestionShimmerEnd\" Color=\"#00000000\" Offset=\"0.62\"", layout);
         Assert.Contains("RepeatBehavior = System.Windows.Media.Animation.RepeatBehavior.Forever", code);
         Assert.Contains("ProtectionSuggestionShimmerTransform.BeginAnimation(", code);
         Assert.Contains("ProtectionSuggestionButtonText.Opacity = 0.55", code);
@@ -2624,7 +2626,7 @@ public sealed class MainWindowLayoutContractTests
         Assert.Contains("NavigateToHistoryAnalysis(\"Learning\")", click);
         Assert.Contains("_dismissedSuggestionIds.Add(suggestion.SuggestionId)", markViewed);
         Assert.Contains("SaveBenefitLearning()", markViewed);
-        Assert.Contains("StopProtectionSuggestionShimmer()", markViewed);
+        Assert.DoesNotContain("StopProtectionSuggestionShimmer()", markViewed);
         Assert.Contains("ShowProtectionSuggestionsDialog(suggestions)", review);
         Assert.Contains("IsEnabled = suggested", code);
         Assert.Contains("ProtectEntireSuggestedFamily", code);
@@ -3399,7 +3401,7 @@ public sealed class MainWindowLayoutContractTests
     {
         var project = XDocument.Load(ProjectFixturePath());
 
-        Assert.Equal("0.1.7.4", project.Descendants("Version").Single().Value);
+        Assert.Equal("0.1.7.3", project.Descendants("Version").Single().Value);
     }
 
     [Fact]

@@ -86,7 +86,6 @@ public partial class MainWindow : Window
     private IReadOnlyList<ProtectionSuggestion> _displayedProtectionSuggestions =
         Array.Empty<ProtectionSuggestion>();
     private UpdateAsset? _availableUpdate;
-    private string? _updateShimmerDismissedVersion;
     private bool _updateCheckInProgress;
     private bool _automaticUpdatePromptShown;
     private bool _protectionSuggestionShimmerActive;
@@ -7781,10 +7780,7 @@ public partial class MainWindow : Window
         {
             ProtectionSuggestionButtonText.Text = TF("UpdateAvailableVersionFormat", update.Version);
             ProtectionSuggestionButton.IsEnabled = !_state.IsBusy;
-            if (!string.Equals(_updateShimmerDismissedVersion, update.Version.ToString(), StringComparison.OrdinalIgnoreCase))
-                StartProtectionSuggestionShimmer();
-            else
-                StopProtectionSuggestionShimmer();
+            StartProtectionSuggestionShimmer();
             return;
         }
 
@@ -7876,7 +7872,6 @@ public partial class MainWindow : Window
         _currentProtectionSuggestions = Array.Empty<ProtectionSuggestion>();
         RefreshOverviewAttention(0);
         ReviewProtectionSuggestionsButton.IsEnabled = !_state.IsBusy;
-        StopProtectionSuggestionShimmer();
     }
 
     private void ReviewProtectionSuggestions_OnClick(object sender, RoutedEventArgs e)
@@ -9156,7 +9151,6 @@ public partial class MainWindow : Window
         }
         if (choice.Action != UpdateDialogAction.Install)
         {
-            _updateShimmerDismissedVersion = asset.Version.ToString();
             RefreshOverviewAttention();
             return;
         }
