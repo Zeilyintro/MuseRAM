@@ -7828,13 +7828,14 @@ public partial class MainWindow : Window
         if (_protectionSuggestionShimmerActive) return;
         var animation = new System.Windows.Media.Animation.DoubleAnimation
         {
-            From = -1.4,
-            To = 1.4,
-            Duration = TimeSpan.FromSeconds(2.4),
-            BeginTime = TimeSpan.FromSeconds(0.35),
+            From = -1.2,
+            To = 1.2,
+            Duration = TimeSpan.FromSeconds(1.8),
+            BeginTime = TimeSpan.FromSeconds(0.45),
             RepeatBehavior = System.Windows.Media.Animation.RepeatBehavior.Forever
         };
 
+        ProtectionSuggestionButtonText.Opacity = 0.55;
         ProtectionSuggestionShimmer.Opacity = 1;
         ProtectionSuggestionShimmerTransform.BeginAnimation(
             System.Windows.Media.TranslateTransform.XProperty,
@@ -7848,8 +7849,9 @@ public partial class MainWindow : Window
         ProtectionSuggestionShimmerTransform.BeginAnimation(
             System.Windows.Media.TranslateTransform.XProperty,
             null);
-        ProtectionSuggestionShimmerTransform.X = -1.4;
+        ProtectionSuggestionShimmerTransform.X = -1.2;
         ProtectionSuggestionShimmer.Opacity = 0;
+        ProtectionSuggestionButtonText.Opacity = 1;
         _protectionSuggestionShimmerActive = false;
     }
 
@@ -9032,7 +9034,7 @@ public partial class MainWindow : Window
         SetBrush("TurboBrush", light ? "#B45309" : "#D6A13A");
         SetBrush("UltimateBrush", light ? "#B91C1C" : "#F87171");
         var shimmerColor = (System.Windows.Media.Color)System.Windows.Media.ColorConverter.ConvertFromString(
-            light ? "#6618181B" : "#99FFFFFF");
+            light ? "#E618181B" : "#F2FFFFFF");
         ProtectionSuggestionShimmerStart.Color = System.Windows.Media.Color.FromArgb(0, shimmerColor.R, shimmerColor.G, shimmerColor.B);
         ProtectionSuggestionShimmerCenter.Color = shimmerColor;
         ProtectionSuggestionShimmerEnd.Color = System.Windows.Media.Color.FromArgb(0, shimmerColor.R, shimmerColor.G, shimmerColor.B);

@@ -651,7 +651,7 @@ public sealed class MainWindowLayoutContractTests
         var overview = layout[overviewStart..settingsStart];
         var settings = layout[settingsStart..];
         Assert.Contains("x:Name=\"ProtectionSuggestionButton\" Grid.Column=\"1\" Style=\"{StaticResource ProtectionSuggestionButtonStyle}\"", overview);
-        Assert.Contains("x:Name=\"ProtectionSuggestionShimmerTransform\" X=\"-1.4\"", overview);
+        Assert.Contains("x:Name=\"ProtectionSuggestionShimmerTransform\" X=\"-1.2\"", overview);
         Assert.Contains("FontWeight=\"SemiBold\" TextTrimming=\"CharacterEllipsis\"", overview);
         Assert.DoesNotContain("x:Name=\"ProtectionSuggestionButton\"", settings);
 
@@ -2619,6 +2619,8 @@ public sealed class MainWindowLayoutContractTests
         Assert.Contains("x:Name=\"ProtectionSuggestionShimmer\"", layout);
         Assert.Contains("RepeatBehavior = System.Windows.Media.Animation.RepeatBehavior.Forever", code);
         Assert.Contains("ProtectionSuggestionShimmerTransform.BeginAnimation(", code);
+        Assert.Contains("ProtectionSuggestionButtonText.Opacity = 0.55", code);
+        Assert.Contains("ProtectionSuggestionButtonText.Opacity = 1", code);
         Assert.Contains("NavigateToHistoryAnalysis(\"Learning\")", click);
         Assert.Contains("_dismissedSuggestionIds.Add(suggestion.SuggestionId)", markViewed);
         Assert.Contains("SaveBenefitLearning()", markViewed);
