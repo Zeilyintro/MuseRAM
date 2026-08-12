@@ -4,7 +4,7 @@
 
 MuseRAM is a memory management tool for Windows. It quietly observes system activity, helps identify background applications suitable for optimization, and reduces memory usage while minimizing disruption to your work.
 
-> Current version: `0.1.7.3` · Beta
+> Current version: `0.1.7.4` · Beta
 
 ![MuseRAM overview and candidate list](./docs/images/overview-dark.png)
 
@@ -46,8 +46,8 @@ Adjust optimization scope, waiting periods, and other preferences beyond the bui
 
 ## Download and Use
 
-1. Download the latest `MuseRAM.exe` from [GitHub Releases](https://github.com/Zeilyintro/MuseRAM/releases).
-2. Place the file in a permanent folder and run it.
+1. Visit [GitHub Releases](https://github.com/Zeilyintro/MuseRAM/releases) and download the portable `MuseRAM.zip` or the standalone `MuseRAM.exe`.
+2. Extract the portable package and run it. A permanent folder is recommended.
 3. Grant administrator permission when prompted by Windows.
 4. For your first use, keep the default settings and protect important applications used for work, creative tasks, or games.
 

@@ -2051,7 +2051,7 @@ public class OptimizationSettingsTests
         Assert.True(ultimate.AllowForegroundProcessTrim);
         Assert.Equal(30, ultimate.MinimumIdleScore);
         Assert.Equal(TimeSpan.FromSeconds(10), ultimate.ProcessCooldown);
-        Assert.Equal(TimeSpan.FromSeconds(120), ultimate.AutoCooldown);
+        Assert.Equal(TimeSpan.FromSeconds(60), ultimate.AutoCooldown);
         Assert.Equal(TimeSpan.Zero, ultimate.VisibleWindowIdleDelay);
         Assert.Equal(12, ultimate.ActiveCpuThresholdPercent);
         Assert.Equal(8d * 1024 * 1024, ultimate.ActiveIoThresholdBytesPerSecond);

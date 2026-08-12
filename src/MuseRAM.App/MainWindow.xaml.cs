@@ -859,6 +859,8 @@ public partial class MainWindow : Window
         var row = CreateProcessRow(originalFamily, protection, protectionContext,
             decisionFamily: targetFamily, now: now) with
         {
+            HasPartialProtectionBadge = protection.FilterUnprotectedProcesses(originalFamily, protectionContext) is { } unprotected &&
+                unprotected.Processes.Count < originalFamily.Processes.Count,
             AutoOptimizationStatus = autoOptimizationStatus,
             Memory = TF(
                 "CandidateMemoryFormat",
@@ -872,6 +874,8 @@ public partial class MainWindow : Window
             IdleScore = targetFamily.IdleScore.ToString("0.0", CultureInfo.CurrentCulture),
             IdleScoreDetail = TF("IdleScoreDetailFormat", targetFamily.IdleScore, targetFamily.Processes.Count)
         };
+        if (row.RetentionIcon == RetentionStatusIcon.PartiallyProtected)
+            row = row with { RetentionIcon = RetentionStatusIcon.None };
         if (row.RetentionIcon == RetentionStatusIcon.None &&
             (string.Equals(row.IdleStatus, T("ActivityObserving"), StringComparison.Ordinal) ||
              string.Equals(row.IdleStatus, T("ActivityMinimized"), StringComparison.Ordinal)))
@@ -4131,6 +4135,72 @@ public partial class MainWindow : Window
         return accepted;
     }
 
+    private bool ShowReboundProtectionWarning()
+    {
+        var accepted = false;
+        var suppress = new System.Windows.Controls.CheckBox
+        {
+            Content = T("QuickReboundProtectionDoNotRemind"),
+            Style = (Style)FindResource("ThemedCheckBoxStyle"),
+            Margin = new Thickness(0, 18, 0, 0)
+        };
+        var confirm = new Button
+        {
+            Content = T("Continue"),
+            MinWidth = 96,
+            IsDefault = true,
+            Style = (Style)FindResource("PrimaryButtonStyle")
+        };
+        var cancel = new Button
+        {
+            Content = T("Cancel"),
+            MinWidth = 92,
+            IsCancel = true,
+            Style = (Style)FindResource("ButtonStyle")
+        };
+        var buttons = new StackPanel
+        {
+            Orientation = System.Windows.Controls.Orientation.Horizontal,
+            HorizontalAlignment = System.Windows.HorizontalAlignment.Right,
+            Margin = new Thickness(0, 22, 0, 0)
+        };
+        buttons.Children.Add(cancel);
+        buttons.Children.Add(confirm);
+        var root = new StackPanel { Margin = new Thickness(24) };
+        root.Children.Add(new TextBlock
+        {
+            Text = T("QuickReboundProtectionWarning"),
+            TextWrapping = TextWrapping.Wrap,
+            LineHeight = 21,
+            Foreground = (MediaBrush)FindResource("TextBrush")
+        });
+        root.Children.Add(suppress);
+        root.Children.Add(buttons);
+        var dialog = new Window
+        {
+            Owner = this,
+            Title = T("QuickReboundProtectionWarningTitle"),
+            Width = 500,
+            SizeToContent = SizeToContent.Height,
+            ResizeMode = ResizeMode.NoResize,
+            WindowStartupLocation = WindowStartupLocation.CenterOwner,
+            ShowInTaskbar = false,
+            Background = (MediaBrush)FindResource("WindowBrush"),
+            Foreground = (MediaBrush)FindResource("TextBrush"),
+            Content = root
+        };
+        confirm.Click += (_, _) =>
+        {
+            accepted = true;
+            if (suppress.IsChecked == true)
+                _ = TryUpdateSettings(settings => settings.ReboundProtectionWarningSuppressed = true);
+            dialog.DialogResult = true;
+        };
+        ApplyDialogTheme(dialog);
+        _ = dialog.ShowDialog();
+        return accepted;
+    }
+
     private void RefreshProfileSelectors()
     {
         var choices = new List<ProfileChoice>();
@@ -5968,6 +6038,7 @@ public partial class MainWindow : Window
             LateReboundSlider.Value = rebound.LateReboundPercent;
             FirstBackoffSlider.Value = rebound.FirstBackoff.TotalMinutes;
             SecondBackoffSlider.Value = rebound.SecondBackoff.TotalMinutes;
+            ReboundProtectionCheckBox.IsChecked = rebound.Enabled;
             MinProcessMemoryTextBox.Text = (settings.MinimumProcessWorkingSetBytes / (1024d * 1024d)).ToString("0.##", CultureInfo.CurrentCulture);
             TriggerGiBTextBox.Text = (settings.TriggerAvailableBytes / (1024d * 1024d * 1024d)).ToString("0.##", CultureInfo.CurrentCulture);
             EarlyWindowTextBox.Text = rebound.EarlyWindow.TotalSeconds.ToString("0", CultureInfo.CurrentCulture);
@@ -6004,6 +6075,21 @@ public partial class MainWindow : Window
 
     private void CustomProfileCheckBox_OnChanged(object sender, RoutedEventArgs e) =>
         MarkCustomProfileDraftDirty();
+
+    private void ReboundProtectionCheckBox_OnChanged(object sender, RoutedEventArgs e)
+    {
+        if (_loadingCustomProfileEditor) return;
+        if (ReboundProtectionCheckBox.IsChecked == false &&
+            !_settings.ReboundProtectionWarningSuppressed &&
+            !ShowReboundProtectionWarning())
+        {
+            _loadingCustomProfileEditor = true;
+            ReboundProtectionCheckBox.IsChecked = true;
+            _loadingCustomProfileEditor = false;
+            return;
+        }
+        MarkCustomProfileDraftDirty();
+    }
 
     private void TriggerPercentSlider_OnValueChanged(
         object sender,
@@ -6068,7 +6154,8 @@ public partial class MainWindow : Window
         }
         foreach (var checkBox in new[]
                  {
-                     AllowIndependentBackgroundProcessTrimCheckBox
+                     AllowIndependentBackgroundProcessTrimCheckBox,
+                     ReboundProtectionCheckBox
                  })
         {
             SetCustomProfileCheckBoxEditable(checkBox, editable);
@@ -6199,7 +6286,12 @@ public partial class MainWindow : Window
                 lateWindow,
                 LateReboundSlider.Value,
                 TimeSpan.FromMinutes(FirstBackoffSlider.Value),
-                TimeSpan.FromMinutes(SecondBackoffSlider.Value)),
+                TimeSpan.FromMinutes(SecondBackoffSlider.Value))
+            {
+                Enabled = ReboundProtectionCheckBox.IsChecked == true,
+                CycleAfterSecondBackoff = current.Rebound.CycleAfterSecondBackoff,
+                AllowSecondBackoffForegroundIdleRetry = current.Rebound.AllowSecondBackoffForegroundIdleRetry
+            },
             StableStateSuppression = current.StableStateSuppression,
             StableStateSuppressionMode = current.StableStateSuppressionMode
         });
@@ -6293,7 +6385,12 @@ public partial class MainWindow : Window
                 lateWindow,
                 LateReboundSlider.Value,
                 TimeSpan.FromMinutes(FirstBackoffSlider.Value),
-                TimeSpan.FromMinutes(SecondBackoffSlider.Value)),
+                TimeSpan.FromMinutes(SecondBackoffSlider.Value))
+            {
+                Enabled = ReboundProtectionCheckBox.IsChecked == true,
+                CycleAfterSecondBackoff = current.Rebound.CycleAfterSecondBackoff,
+                AllowSecondBackoffForegroundIdleRetry = current.Rebound.AllowSecondBackoffForegroundIdleRetry
+            },
             StableStateSuppression = current.StableStateSuppression,
             StableStateSuppressionMode = current.StableStateSuppressionMode
         });

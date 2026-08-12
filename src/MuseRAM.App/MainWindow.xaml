@@ -1817,7 +1817,10 @@
                     </ContextMenu>
                   </DataGrid.ContextMenu>
                   <DataGrid.Columns>
-                    <DataGridTextColumn Binding="{Binding Name}" Width="1.55*" MinWidth="120" HeaderStyle="{StaticResource CandidateLeftHeaderStyle}" ElementStyle="{StaticResource CandidateLeftCellTextStyle}"><DataGridTextColumn.Header><TextBlock Text="{DynamicResource Application}" /></DataGridTextColumn.Header></DataGridTextColumn>
+                    <DataGridTemplateColumn Width="1.55*" MinWidth="120" HeaderStyle="{StaticResource CandidateLeftHeaderStyle}">
+                      <DataGridTemplateColumn.Header><TextBlock Text="{DynamicResource Application}" /></DataGridTemplateColumn.Header>
+                      <DataGridTemplateColumn.CellTemplate><DataTemplate><StackPanel Orientation="Horizontal" VerticalAlignment="Center"><TextBlock Text="{Binding Name}" Style="{StaticResource CandidateLeftCellTextStyle}" TextTrimming="CharacterEllipsis"/><Path Style="{StaticResource LucideIconPathStyle}" Data="{StaticResource IconShieldPartial}" Stroke="{DynamicResource AccentBrush}" Width="15" Height="15" Margin="6,0,0,0" Visibility="{Binding HasPartialProtectionBadge, Converter={StaticResource BooleanToVisibilityConverter}}" ToolTip="{DynamicResource CandidatePartialProtectionHelp}"/></StackPanel></DataTemplate></DataGridTemplateColumn.CellTemplate>
+                    </DataGridTemplateColumn>
                     <DataGridTextColumn Binding="{Binding Memory}" Width="1.35*" MinWidth="130" HeaderStyle="{StaticResource CandidateCenterHeaderStyle}" ElementStyle="{StaticResource CandidateMemoryCellTextStyle}"><DataGridTextColumn.Header><TextBlock Text="{DynamicResource CandidateMemory}" ToolTip="{DynamicResource CandidateMemoryHelp}" /></DataGridTextColumn.Header></DataGridTextColumn>
                     <DataGridTemplateColumn Width="1.45*" MinWidth="130" HeaderStyle="{StaticResource CandidateCenterHeaderStyle}">
                       <DataGridTemplateColumn.Header><TextBlock Text="{DynamicResource IdleStatusColumn}" /></DataGridTemplateColumn.Header>
@@ -2461,7 +2464,7 @@
                         </StackPanel>
                       </Grid>
 
-                      <TextBlock Text="{DynamicResource CooldownAndRebound}" FontSize="16" FontWeight="SemiBold" Margin="0,20,0,10" />
+                      <Grid Margin="0,20,0,10"><Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions><StackPanel Orientation="Horizontal"><TextBlock Text="{DynamicResource CooldownAndRebound}" FontSize="16" FontWeight="SemiBold" VerticalAlignment="Center"/><Button Style="{StaticResource ProfileHelpButtonStyle}" Content="?" Margin="7,0,0,0" ToolTip="{DynamicResource QuickReboundProtectionHelp}"/></StackPanel><CheckBox x:Name="ReboundProtectionCheckBox" Grid.Column="1" Style="{StaticResource SafetyToggleStyle}" IsChecked="True" AutomationProperties.Name="{DynamicResource QuickReboundProtection}" ToolTip="{DynamicResource QuickReboundProtectionHelp}" Checked="ReboundProtectionCheckBox_OnChanged" Unchecked="ReboundProtectionCheckBox_OnChanged"/></Grid>
                       <Grid>
                         <Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="18"/><ColumnDefinition/></Grid.ColumnDefinitions>
                         <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>

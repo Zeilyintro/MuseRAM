@@ -613,7 +613,7 @@ public sealed class MainWindowLayoutContractTests
         Assert.Contains("Text=\"{DynamicResource SafeCandidates}\" FontSize=\"17\" FontWeight=\"SemiBold\" VerticalAlignment=\"Center\" ToolTip=\"{DynamicResource CandidateDescription}\"", text);
         Assert.DoesNotContain("Grid.Row=\"2\" Grid.ColumnSpan=\"3\" Text=\"{DynamicResource CandidateDescription}\"", text);
         Assert.Contains("ItemsSource=\"{Binding Candidates}\" MaxHeight=\"280\"", text);
-        Assert.Contains("DataGridTextColumn Binding=\"{Binding Name}\" Width=\"1.55*\" MinWidth=\"120\" HeaderStyle=\"{StaticResource CandidateLeftHeaderStyle}\"", text);
+        Assert.Contains("DataGridTemplateColumn Width=\"1.55*\" MinWidth=\"120\" HeaderStyle=\"{StaticResource CandidateLeftHeaderStyle}\"", text);
         Assert.Contains("Binding=\"{Binding AutoOptimizationStatus}\" Width=\"1.5*\" MinWidth=\"120\"", text);
         Assert.Contains("x:Name=\"OverviewStableSuppressionRow\" Margin=\"0,8,0,0\" Background=\"Transparent\" BorderThickness=\"0\" Padding=\"0\" Height=\"38\"", text);
     }
@@ -1775,9 +1775,10 @@ public sealed class MainWindowLayoutContractTests
         Assert.Contains("x:Key=\"CandidateIdleStatusCellTextStyle\"", layout);
         Assert.Contains("x:Key=\"CandidateLeftHeaderStyle\"", layout);
         Assert.Contains("x:Key=\"CandidateCenterHeaderStyle\"", layout);
-        Assert.Contains("DataGridTextColumn Binding=\"{Binding Name}\" Width=\"1.55*\" MinWidth=\"120\" HeaderStyle=\"{StaticResource CandidateLeftHeaderStyle}\" ElementStyle=\"{StaticResource CandidateLeftCellTextStyle}\"", candidateGrid);
+        Assert.Contains("DataGridTemplateColumn Width=\"1.55*\" MinWidth=\"120\" HeaderStyle=\"{StaticResource CandidateLeftHeaderStyle}\"", candidateGrid);
+        Assert.Contains("Text=\"{Binding Name}\" Style=\"{StaticResource CandidateLeftCellTextStyle}\"", candidateGrid);
+        Assert.Contains("Visibility=\"{Binding HasPartialProtectionBadge, Converter={StaticResource BooleanToVisibilityConverter}}\"", candidateGrid);
         Assert.Contains("Visibility=\"{Binding HasRetentionIcon, Converter={StaticResource BooleanToVisibilityConverter}}\" Content=\"{Binding}\" ContentTemplate=\"{StaticResource RetentionStatusIconTemplate}\"", candidateGrid);
-        Assert.DoesNotContain("Text=\"{Binding Name}\"", candidateGrid);
         Assert.Contains("Text=\"{Binding IdleStatus}\"", candidateGrid);
         Assert.Contains("ToolTip=\"{Binding IdleStatusDetail}\"", candidateGrid);
         Assert.Contains("Binding=\"{Binding AutoOptimizationStatus}\" Width=\"1.5*\" MinWidth=\"120\"", layout);
@@ -2005,7 +2006,8 @@ public sealed class MainWindowLayoutContractTests
         Assert.DoesNotContain("Storyboard.TargetProperty=\"MaxHeight\"", layout);
         var expansionMotion = File.ReadAllText(Path.Combine(AppContext.BaseDirectory, "Fixtures", "ExpansionMotion.cs"));
         Assert.Contains("element.DesiredSize.Height", expansionMotion);
-        Assert.Contains("new DoubleAnimation(0, targetHeight, TimeSpan.FromMilliseconds(180))", expansionMotion);
+        Assert.Contains("new DoubleAnimation(0, targetHeight, TimeSpan.FromMilliseconds(260))", expansionMotion);
+        Assert.Contains("BeginTime = TimeSpan.FromMilliseconds(35)", expansionMotion);
         Assert.Contains("<Setter Property=\"PopupAnimation\" Value=\"Slide\" />", layout);
     }
 
@@ -3403,7 +3405,7 @@ public sealed class MainWindowLayoutContractTests
     {
         var project = XDocument.Load(ProjectFixturePath());
 
-        Assert.Equal("0.1.7.3", project.Descendants("Version").Single().Value);
+        Assert.Equal("0.1.7.4", project.Descendants("Version").Single().Value);
     }
 
     [Fact]

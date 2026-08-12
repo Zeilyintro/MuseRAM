@@ -276,6 +276,7 @@ public sealed record ProcessRow(
     ProcessFamilySnapshot Family)
 {
     public bool HasRetentionIcon => RetentionIcon != RetentionStatusIcon.None;
+    public bool HasPartialProtectionBadge { get; init; }
 }
 
 public sealed record ApplicationReboundDetailRow(

@@ -4302,9 +4302,94 @@ public sealed class ApplicationReboundBackoffTrackerTests
         var turbo = ReboundBackoffSettings.For(OptimizationProfile.Turbo);
         var ultimate = ReboundBackoffSettings.For(OptimizationProfile.Ultimate);
 
-        Assert.Equal((50d, 70d, 30d, 120d), Values(lite));
-        Assert.Equal((60d, 80d, 5d, 20d), Values(turbo));
-        Assert.Equal((75d, 90d, 5d, 20d), Values(ultimate));
+        Assert.Equal((50d, 70d, 30d, 60d), Values(lite));
+        Assert.Equal((60d, 80d, 5d, 10d), Values(turbo));
+        Assert.Equal((75d, 90d, 2d, 5d), Values(ultimate));
+        Assert.False(lite.CycleAfterSecondBackoff);
+        Assert.False(turbo.CycleAfterSecondBackoff);
+        Assert.True(ultimate.CycleAfterSecondBackoff);
+        Assert.True(ultimate.AllowSecondBackoffForegroundIdleRetry);
+    }
+
+    [Fact]
+    public void UltimateBackoffCyclesFirstAndSecondStagesWithoutLongTermObservation()
+    {
+        var tracker = new ApplicationReboundBackoffTracker();
+        var settings = ReboundBackoffSettings.For(OptimizationProfile.Ultimate);
+        var now = DateTimeOffset.UtcNow;
+
+        for (var index = 0; index < 4; index++)
+        {
+            var started = now + TimeSpan.FromMinutes(index * 10);
+            tracker.Begin("app", 500, 100, settings, started);
+            tracker.Observe(new[] { Family("app", 500) }, started + settings.EarlyWindow);
+            var progress = Assert.Single(tracker.CaptureProgress(started + settings.EarlyWindow));
+            Assert.Equal(index + 1, progress.ReboundCount);
+            Assert.Equal(index % 2 == 0 ? 1 : 2, progress.BackoffStage);
+            Assert.Null(progress.LongTermObservedSeconds);
+        }
+    }
+
+    [Theory]
+    [InlineData(OptimizationProfile.Lite)]
+    [InlineData(OptimizationProfile.Turbo)]
+    public void ConservativeProfilesStillEnterLongTermObservationAfterThirdRebound(OptimizationProfile profile)
+    {
+        var tracker = new ApplicationReboundBackoffTracker();
+        var settings = ReboundBackoffSettings.For(profile);
+        var now = DateTimeOffset.UtcNow;
+        for (var index = 0; index < 3; index++)
+        {
+            var started = now + TimeSpan.FromHours(index * 8);
+            tracker.Begin("app", 500, 100, settings, started);
+            tracker.Observe(new[] { Family("app", 500) }, started + settings.EarlyWindow);
+        }
+
+        Assert.True(Assert.IsType<ApplicationBackoffStatus>(
+            tracker.GetBackoffStatus("app", now + TimeSpan.FromHours(16))).LongTermObservation);
+    }
+
+    [Fact]
+    public void DisabledReboundProtectionKeepsOutcomeObservationWithoutRegisteringBackoff()
+    {
+        var tracker = new ApplicationReboundBackoffTracker();
+        var settings = ReboundBackoffSettings.For(OptimizationProfile.Turbo) with { Enabled = false };
+        var now = DateTimeOffset.UtcNow;
+        tracker.Begin("app", 500, 100, settings, now, learnOutcome: true);
+
+        tracker.Observe(new[] { Family("app", 500) }, now + settings.LateWindow);
+
+        Assert.Null(tracker.GetBackoffStatus("app", now + settings.LateWindow));
+        Assert.False(Assert.Single(tracker.DrainCompletedOutcomes()).BackoffTriggered);
+    }
+
+    [Fact]
+    public void UltimateSecondBackoffCanEndAfterForegroundThenSustainedBackgroundIdle()
+    {
+        var tracker = new ApplicationReboundBackoffTracker();
+        var settings = ReboundBackoffSettings.For(OptimizationProfile.Ultimate);
+        var stable = StableStateSuppressionSettings.For(OptimizationProfile.Ultimate);
+        var now = DateTimeOffset.UtcNow;
+
+        tracker.Begin("app", 500, 100, settings, now);
+        tracker.Observe(new[] { Family("app", 500) }, now + settings.EarlyWindow);
+        var secondStartedAt = now + TimeSpan.FromMinutes(3);
+        tracker.Begin("app", 500, 100, settings, secondStartedAt);
+        tracker.Observe(new[] { Family("app", 500) }, secondStartedAt + settings.EarlyWindow);
+        var foregroundAt = secondStartedAt + TimeSpan.FromMinutes(1);
+        tracker.UpdateLongTermRetryPermissions(
+            new[] { Family("app", 500, foreground: true) }, false, 1, stable, foregroundAt);
+        Assert.True(tracker.IsBlocked("app", foregroundAt));
+
+        var idleStartedAt = foregroundAt + TimeSpan.FromSeconds(1);
+        tracker.UpdateLongTermRetryPermissions(
+            new[] { Family("app", 500) }, false, 1, stable, idleStartedAt);
+        tracker.UpdateLongTermRetryPermissions(
+            new[] { Family("app", 500) }, false, 1, stable,
+            idleStartedAt + BackgroundActivityTracker.MinimumObservation);
+
+        Assert.False(tracker.IsBlocked(
+            "app", idleStartedAt + BackgroundActivityTracker.MinimumObservation));
     }
 
     private static (double Early, double Late, double FirstMinutes, double SecondMinutes) Values(

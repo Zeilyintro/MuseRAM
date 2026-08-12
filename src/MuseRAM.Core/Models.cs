@@ -56,7 +56,7 @@ public sealed record OptimizationSettings(
             { VisibleWindowIdleDelay = TimeSpan.FromMinutes(5) },
         OptimizationProfile.Ultimate => new(
             0, 48L.MiB(), 4L.MiB(), 30, 0, 0, true, true,
-            TimeSpan.FromSeconds(10), TimeSpan.FromSeconds(120), false)
+            TimeSpan.FromSeconds(10), TimeSpan.FromSeconds(60), false)
             {
                 VisibleWindowIdleDelay = TimeSpan.Zero,
                 ActiveCpuThresholdPercent = 12,

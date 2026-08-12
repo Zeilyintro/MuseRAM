@@ -8,13 +8,21 @@ public sealed record ReboundBackoffSettings(
     TimeSpan FirstBackoff,
     TimeSpan SecondBackoff)
 {
+    public bool Enabled { get; init; } = true;
+    public bool CycleAfterSecondBackoff { get; init; }
+    public bool AllowSecondBackoffForegroundIdleRetry { get; init; }
+
     public static ReboundBackoffSettings Default { get; } = For(OptimizationProfile.Turbo);
 
     public static ReboundBackoffSettings For(OptimizationProfile profile) => profile switch
     {
-        OptimizationProfile.Lite => Create(50, 70, 30, 120),
-        OptimizationProfile.Turbo => Create(60, 80, 5, 20),
-        OptimizationProfile.Ultimate => Create(75, 90, 5, 20),
+        OptimizationProfile.Lite => Create(50, 70, 30, 60),
+        OptimizationProfile.Turbo => Create(60, 80, 5, 10),
+        OptimizationProfile.Ultimate => Create(75, 90, 2, 5) with
+        {
+            CycleAfterSecondBackoff = true,
+            AllowSecondBackoffForegroundIdleRetry = true
+        },
         _ => throw new ArgumentOutOfRangeException(nameof(profile), profile, null)
     };
 
@@ -268,6 +276,7 @@ public static class CustomProfilePolicy
         var latePercent = Math.Clamp(rebound.LateReboundPercent, earlyPercent, 99);
         var firstBackoffMinutes = Math.Clamp(rebound.FirstBackoff.TotalMinutes, 1, 120);
         var secondBackoffMinutes = Math.Clamp(rebound.SecondBackoff.TotalMinutes, firstBackoffMinutes, 360);
+        var ultimateBackoffPolicy = baseProfile == OptimizationProfile.Ultimate;
 
         return new CustomOptimizationProfile
         {
@@ -308,7 +317,13 @@ public static class CustomProfilePolicy
                 TimeSpan.FromSeconds(lateWindowSeconds),
                 latePercent,
                 TimeSpan.FromMinutes(firstBackoffMinutes),
-                TimeSpan.FromMinutes(secondBackoffMinutes)),
+                TimeSpan.FromMinutes(secondBackoffMinutes))
+            {
+                Enabled = rebound.Enabled,
+                CycleAfterSecondBackoff = rebound.CycleAfterSecondBackoff || ultimateBackoffPolicy,
+                AllowSecondBackoffForegroundIdleRetry =
+                    rebound.AllowSecondBackoffForegroundIdleRetry || ultimateBackoffPolicy
+            },
             StableStateSuppression = stableStateSuppression,
             StableStateSuppressionMode = stableStateSuppressionMode
         };
@@ -536,6 +551,10 @@ public sealed record ApplicationBackoffProgress(
 {
     public string? TargetKey { get; init; }
     public long LongTermBaselineWorkingSetBytes { get; init; }
+    public int BackoffStage { get; init; }
+    public bool AllowForegroundIdleRetry { get; init; }
+    public bool TimedBackoffSawForeground { get; init; }
+    public double? TimedBackgroundLowActivitySeconds { get; init; }
 }
 
 public sealed record ApplicationReboundOutcome(
@@ -1173,9 +1192,13 @@ public sealed class ApplicationReboundBackoffTracker
                 var reboundPercent = ReboundPercent(pending, current);
                 if (IsSignificantRebound(reboundPercent, pending.Settings.EarlyReboundPercent))
                 {
-                    if (!pending.BackoffRegistered)
+                    if (!pending.BackoffRegistered && pending.Settings.Enabled)
                         Register(targetKey, pending.FamilyKey, pending.Settings, current, now);
-                    pending = pending with { EarlyChecked = true, BackoffRegistered = true };
+                    pending = pending with
+                    {
+                        EarlyChecked = true,
+                        BackoffRegistered = pending.Settings.Enabled
+                    };
                     _pending[targetKey] = pending;
                 }
                 else if (elapsed >= pending.Settings.EarlyWindow)
@@ -1190,6 +1213,7 @@ public sealed class ApplicationReboundBackoffTracker
             RecordOutcome(pending, current, lateReboundPercent, now);
             var backoffTriggered = pending.BackoffRegistered;
             if (!backoffTriggered &&
+                pending.Settings.Enabled &&
                 IsSignificantRebound(lateReboundPercent, pending.Settings.LateReboundPercent))
             {
                 Register(targetKey, pending.FamilyKey, pending.Settings, current, now);
@@ -2500,6 +2524,37 @@ public sealed class ApplicationReboundBackoffTracker
         foreach (var pair in _states.ToArray())
         {
             var state = pair.Value;
+            if (state.AllowForegroundIdleRetry && state.Stage == 2 &&
+                state.BlockedUntil > now &&
+                familiesByKey.TryGetValue(state.FamilyKey, out var timedFamily))
+            {
+                var timedProcesses = ComponentProcesses(pair.Key, timedFamily);
+                if (timedProcesses.Count > 0)
+                {
+                    var timedForeground = timedProcesses.Any(process => process.IsForeground);
+                    var timedLowActivity = !timedForeground &&
+                        timedProcesses.All(process => process.HasReliableActivitySample) &&
+                        timedProcesses.Sum(process => Math.Max(0, process.CpuPercent)) <
+                        BackgroundActivityTracker.DeepReleaseActiveCpuThresholdPercent &&
+                        timedProcesses.Sum(process => Math.Max(0, process.IoBytesPerSecond)) <
+                        BackgroundActivityTracker.DeepReleaseActiveIoThresholdBytesPerSecond;
+                    var sawForeground = state.TimedSawForeground || timedForeground;
+                    DateTimeOffset? timedLowActivityStartedAt = timedForeground || !timedLowActivity
+                        ? null
+                        : state.TimedBackgroundLowActivityStartedAt ?? now;
+                    state = state with
+                    {
+                        TimedSawForeground = sawForeground,
+                        TimedBackgroundLowActivityStartedAt = timedLowActivityStartedAt
+                    };
+                    if (sawForeground && timedLowActivityStartedAt.HasValue &&
+                        now - timedLowActivityStartedAt.Value >= BackgroundActivityTracker.MinimumObservation)
+                    {
+                        state = state with { BlockedUntil = DateTimeOffset.MinValue };
+                    }
+                    _states[pair.Key] = state;
+                }
+            }
             if (state.LongTerm is not { RetryPermitted: false } longTerm ||
                 !familiesByKey.TryGetValue(state.FamilyKey, out var family))
             {
@@ -2672,7 +2727,13 @@ public sealed class ApplicationReboundBackoffTracker
                 pair.Value.LongTerm?.RetryPermitted ?? false)
             {
                 TargetKey = pair.Key,
-                LongTermBaselineWorkingSetBytes = pair.Value.LongTerm?.BaselineWorkingSetBytes ?? 0
+                LongTermBaselineWorkingSetBytes = pair.Value.LongTerm?.BaselineWorkingSetBytes ?? 0,
+                BackoffStage = pair.Value.Stage,
+                AllowForegroundIdleRetry = pair.Value.AllowForegroundIdleRetry,
+                TimedBackoffSawForeground = pair.Value.TimedSawForeground,
+                TimedBackgroundLowActivitySeconds = pair.Value.TimedBackgroundLowActivityStartedAt is { } lowActivityAt
+                    ? Math.Max(0, (now - lowActivityAt).TotalSeconds)
+                    : null
             })
             .ToArray();
 
@@ -2707,7 +2768,13 @@ public sealed class ApplicationReboundBackoffTracker
                         item.LongTermSawForeground,
                         item.LongTermRetryPermitted,
                         Math.Max(0, item.LongTermBaselineWorkingSetBytes),
-                        BackgroundLowActivityStartedAt: null));
+                        BackgroundLowActivityStartedAt: null),
+                Stage: item.BackoffStage is 1 or 2 ? item.BackoffStage : Math.Min(item.ReboundCount, 2),
+                AllowForegroundIdleRetry: item.AllowForegroundIdleRetry,
+                TimedSawForeground: item.TimedBackoffSawForeground,
+                TimedBackgroundLowActivityStartedAt: item.TimedBackgroundLowActivitySeconds is { } seconds
+                    ? now - TimeSpan.FromSeconds(seconds)
+                    : null);
             if (item.LongTermObservedSeconds is not null || item.RemainingBlockSeconds > 0)
             {
                 _naturalRecoveryStartedAts[targetKey] = item.LongTermObservedSeconds is { } longTermObserved
@@ -3216,6 +3283,7 @@ public sealed class ApplicationReboundBackoffTracker
         long currentWorkingSetBytes,
         DateTimeOffset now)
     {
+        if (!settings.Enabled) return;
         foreach (var scopeKey in _naturalStableWindows
                      .Where(pair => pair.Value.ComponentKeys.Contains(
                          targetKey,
@@ -3226,11 +3294,18 @@ public sealed class ApplicationReboundBackoffTracker
             _naturalStableWindows.Remove(scopeKey);
             _stableCandidates.Remove(scopeKey);
         }
-        var count = _states.GetValueOrDefault(targetKey)?.Count + 1 ?? 1;
-        _states[targetKey] = count switch
+        var previous = _states.GetValueOrDefault(targetKey);
+        var count = previous?.Count + 1 ?? 1;
+        var stage = settings.CycleAfterSecondBackoff
+            ? previous?.Stage == 1 ? 2 : 1
+            : Math.Min(count, 3);
+        _states[targetKey] = stage switch
         {
-            1 => new BackoffState(familyKey, count, now, now + settings.FirstBackoff, null),
-            2 => new BackoffState(familyKey, count, now, now + settings.SecondBackoff, null),
+            1 => new BackoffState(familyKey, count, now, now + settings.FirstBackoff, null,
+                Stage: 1),
+            2 => new BackoffState(familyKey, count, now, now + settings.SecondBackoff, null,
+                Stage: 2,
+                AllowForegroundIdleRetry: settings.AllowSecondBackoffForegroundIdleRetry),
             _ => new BackoffState(
                 familyKey,
                 count,
@@ -3241,7 +3316,8 @@ public sealed class ApplicationReboundBackoffTracker
                     SawForeground: false,
                     RetryPermitted: false,
                     Math.Max(0, currentWorkingSetBytes),
-                    BackgroundLowActivityStartedAt: null))
+                    BackgroundLowActivityStartedAt: null),
+                Stage: 3)
         };
         _naturalRecoveryStartedAts[targetKey] = now;
         _naturalRecoveryCycleIds[targetKey] = $"backoff:{now.UtcTicks}:{targetKey}";
@@ -3296,7 +3372,11 @@ public sealed class ApplicationReboundBackoffTracker
         int Count,
         DateTimeOffset StartedAt,
         DateTimeOffset BlockedUntil,
-        LongTermObservationState? LongTerm);
+        LongTermObservationState? LongTerm,
+        int Stage = 0,
+        bool AllowForegroundIdleRetry = false,
+        bool TimedSawForeground = false,
+        DateTimeOffset? TimedBackgroundLowActivityStartedAt = null);
 
     private sealed record LongTermObservationState(
         DateTimeOffset StartedAt,

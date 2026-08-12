@@ -69,6 +69,7 @@ public sealed class LocalSettings
     public bool ProtectRelatedProcesses { get; set; } = true;
     public bool UltimateRiskPromptSuppressed { get; set; }
     public bool SelectedApplicationOptimizationPromptSuppressed { get; set; }
+    public bool ReboundProtectionWarningSuppressed { get; set; }
     public CloseButtonBehavior CloseButtonBehavior { get; set; } = CloseButtonBehavior.Ask;
     public string LanguageCode { get; set; } = "zh-CN";
     public string UpdateFeedUrl { get; set; } = UpdateConfiguration.FeedUrl;
@@ -169,6 +170,7 @@ public sealed class LocalSettings
         ProtectRelatedProcesses = ProtectRelatedProcesses,
         UltimateRiskPromptSuppressed = UltimateRiskPromptSuppressed,
         SelectedApplicationOptimizationPromptSuppressed = SelectedApplicationOptimizationPromptSuppressed,
+        ReboundProtectionWarningSuppressed = ReboundProtectionWarningSuppressed,
         CloseButtonBehavior = CloseButtonBehavior,
         LanguageCode = LanguageCode,
         UpdateFeedUrl = UpdateFeedUrl,

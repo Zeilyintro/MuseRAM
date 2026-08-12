@@ -62,7 +62,7 @@ public static class ExpansionMotion
             element.Opacity = 0;
             element.IsHitTestVisible = true;
 
-            var heightAnimation = new DoubleAnimation(0, targetHeight, TimeSpan.FromMilliseconds(180))
+            var heightAnimation = new DoubleAnimation(0, targetHeight, TimeSpan.FromMilliseconds(260))
             {
                 EasingFunction = new CubicEase { EasingMode = EasingMode.EaseOut }
             };
@@ -74,7 +74,11 @@ public static class ExpansionMotion
             };
             element.BeginAnimation(FrameworkElement.MaxHeightProperty, heightAnimation);
             element.BeginAnimation(UIElement.OpacityProperty,
-                new DoubleAnimation(0, 1, TimeSpan.FromMilliseconds(160)));
+                new DoubleAnimation(0, 1, TimeSpan.FromMilliseconds(220))
+                {
+                    BeginTime = TimeSpan.FromMilliseconds(35),
+                    EasingFunction = new CubicEase { EasingMode = EasingMode.EaseOut }
+                });
             return;
         }
 
@@ -82,7 +86,7 @@ public static class ExpansionMotion
         element.MaxHeight = currentHeight;
         element.Opacity = 1;
 
-        var collapseAnimation = new DoubleAnimation(currentHeight, 0, TimeSpan.FromMilliseconds(160))
+        var collapseAnimation = new DoubleAnimation(currentHeight, 0, TimeSpan.FromMilliseconds(230))
         {
             EasingFunction = new CubicEase { EasingMode = EasingMode.EaseIn }
         };
@@ -97,6 +101,9 @@ public static class ExpansionMotion
         };
         element.BeginAnimation(FrameworkElement.MaxHeightProperty, collapseAnimation);
         element.BeginAnimation(UIElement.OpacityProperty,
-            new DoubleAnimation(1, 0, TimeSpan.FromMilliseconds(140)));
+            new DoubleAnimation(1, 0, TimeSpan.FromMilliseconds(180))
+            {
+                EasingFunction = new CubicEase { EasingMode = EasingMode.EaseInOut }
+            });
     }
 }

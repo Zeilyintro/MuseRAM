@@ -4,7 +4,7 @@
 
 MuseRAM 是一款面向 Windows 的内存管理工具。它会安静地观察系统状态，帮助你识别适合处理的后台应用，并在尽量不打扰当前工作的前提下进行内存优化。
 
-> 当前版本：`0.1.7.3` · 测试版
+> 当前版本：`0.1.7.4` · 测试版
 
 ![MuseRAM 概览与候选列表](./docs/images/overview-dark.png)
 
@@ -46,8 +46,8 @@ MuseRAM 是一款面向 Windows 的内存管理工具。它会安静地观察系
 
 ## 下载与使用
 
-1. 前往 GitHub Releases 下载最新的 `MuseRAM.exe`。
-2. 将文件放在一个固定目录中并运行。
+1. 前往 [GitHub Releases](https://github.com/Zeilyintro/MuseRAM/releases)，下载便携版 `MuseRAM.zip`，或直接下载单文件版 `MuseRAM.exe`。
+2. 便携版解压后即可运行；建议将程序放在一个固定目录中。
 3. 按系统提示授予管理员权限。
 4. 初次使用建议保留默认设置，并将工作、创作或游戏中的重要应用加入保护。
 
@@ -69,6 +69,6 @@ MuseRAM 的设置、保护规则、历史记录和学习数据保存在本地。
 
 ## 当前状态
 
-MuseRAM 目前仍处于测试阶段，界面、默认设置和部分行为可能继续调整。建议优先使用默认档位，并通过 GitHub Issues 反馈可复现的问题。
+MuseRAM 目前仍处于测试阶段，界面、默认设置和部分行为可能继续调整。建议优先使用默认档位，并通过 [GitHub Issues](https://github.com/Zeilyintro/MuseRAM/issues) 反馈可复现的问题。
 
 提交问题时，请尽量附上 MuseRAM 版本、Windows 版本、问题发生前的操作步骤和必要截图。公开截图或日志前，请先移除用户名、文件路径及其他私人信息。
