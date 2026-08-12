@@ -34,7 +34,10 @@ public static class UpdateCheckPolicy
         };
 }
 
-public sealed record UpdateAsset(Version Version, Uri DownloadUri, string Sha256, string FileName);
+public sealed record UpdateAsset(Version Version, Uri DownloadUri, string Sha256, string FileName)
+{
+    public string ReleaseNotes { get; init; } = string.Empty;
+}
 public sealed record UpdateCheckResult(bool IsAvailable, UpdateAsset? Asset, string Message);
 
 public sealed class UpdateFeedClient
@@ -67,7 +70,10 @@ public sealed class UpdateFeedClient
 
         var fileName = Path.GetFileName(downloadUri.LocalPath);
         if (string.IsNullOrWhiteSpace(fileName)) fileName = "MuseRAM.exe";
-        var asset = new UpdateAsset(latestVersion, downloadUri, manifest.Sha256!.ToUpperInvariant(), fileName);
+        var asset = new UpdateAsset(latestVersion, downloadUri, manifest.Sha256!.ToUpperInvariant(), fileName)
+        {
+            ReleaseNotes = manifest.ReleaseNotes?.Trim() ?? string.Empty
+        };
         return latestVersion > currentVersion
             ? new UpdateCheckResult(true, asset, $"发现 MuseRAM {latestVersion}。")
             : new UpdateCheckResult(false, asset, "当前已是最新版本。");
@@ -80,6 +86,7 @@ public sealed class UpdateFeedClient
         public string? Version { get; set; }
         public string? DownloadUrl { get; set; }
         public string? Sha256 { get; set; }
+        public string? ReleaseNotes { get; set; }
     }
 }
 

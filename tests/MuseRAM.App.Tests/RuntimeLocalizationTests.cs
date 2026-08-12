@@ -184,7 +184,7 @@ public sealed class RuntimeLocalizationTests
             "RuntimeProgressData",
             "DiagnosticCalibrationData", "DiagnosticLogData", "DiagnosticFilesHelp",
             "CustomProfileIgnoreMemoryPressureHelp", "AllowForegroundOptimizationHelp",
-            "ProcessDescription", "ScheduledOptimizationHelp", "AutoCooldownHelp",
+            "ProcessDescription", "ScheduledOptimizationHelp", "AutoCooldownHelp", "UpdateReleaseNotes",
             "SelectedOptimizationProtectedFormat", "SelectedOptimizationSamplingFormat",
             "SelectedOptimizationActiveFormat", "SelectedOptimizationSafetyFormat",
             "SelectedOptimizationPromptTitle", "SelectedOptimizationPromptFormat",

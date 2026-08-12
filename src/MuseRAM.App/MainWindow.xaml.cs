@@ -7939,6 +7939,7 @@ public partial class MainWindow : Window
 
     private void StopProtectionSuggestionShimmer()
     {
+        if (!_protectionSuggestionShimmerActive) return;
         ProtectionSuggestionShimmerTransform.BeginAnimation(
             System.Windows.Media.TranslateTransform.XProperty,
             null);
@@ -9208,10 +9209,15 @@ public partial class MainWindow : Window
             }
 
             _availableUpdate = result.Asset;
+            if (manual && string.Equals(_settings.SuppressedUpdateVersion,
+                    result.Asset.Version.ToString(), StringComparison.OrdinalIgnoreCase))
+            {
+                _ = TryUpdateSettings(settings => settings.SuppressedUpdateVersion = string.Empty);
+            }
             RefreshOverviewAttention();
             if (!manual && string.Equals(_settings.SuppressedUpdateVersion,
                     result.Asset.Version.ToString(), StringComparison.OrdinalIgnoreCase)) return;
-            if (!manual && (_automaticUpdatePromptShown || _startHidden || !IsVisible)) return;
+            if (!manual && _automaticUpdatePromptShown) return;
             if (!manual) _automaticUpdatePromptShown = true;
             await HandleAvailableUpdateAsync(result.Asset);
         }
@@ -9223,7 +9229,11 @@ public partial class MainWindow : Window
         finally
         {
             _updateCheckInProgress = false;
-            if (manual && !_exitRequested) SetBusyState(false);
+            if (manual && !_exitRequested)
+            {
+                SetBusyState(false);
+                RefreshOverviewAttention();
+            }
         }
     }
 
@@ -9304,6 +9314,21 @@ public partial class MainWindow : Window
         var dialog = CreateUpdateDialogWindow(T("UpdateDialogTitle"));
         var panel = (StackPanel)dialog.Content;
         panel.Children.Add(new TextBlock { Text = TF("UpdateDialogMessageFormat", asset.Version, AppVersion.Current), TextWrapping = TextWrapping.Wrap, FontSize = 15 });
+        if (!string.IsNullOrWhiteSpace(asset.ReleaseNotes))
+        {
+            panel.Children.Add(new TextBlock
+            {
+                Text = T("UpdateReleaseNotes"),
+                FontWeight = FontWeights.SemiBold,
+                Margin = new Thickness(0, 18, 0, 6)
+            });
+            panel.Children.Add(new TextBlock
+            {
+                Text = asset.ReleaseNotes,
+                TextWrapping = TextWrapping.Wrap,
+                Foreground = (MediaBrush)FindResource("MutedBrush")
+            });
+        }
         var suppress = new System.Windows.Controls.CheckBox { Content = TF("UpdateSuppressVersionFormat", asset.Version), Margin = new Thickness(0, 18, 0, 0), Foreground = (MediaBrush)FindResource("TextBrush") };
         panel.Children.Add(suppress);
         var buttons = CreateUpdateDialogButtons();

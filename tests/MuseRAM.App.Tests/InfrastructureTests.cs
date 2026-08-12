@@ -1908,7 +1908,7 @@ public sealed class UpdateServicesTests
     [Fact]
     public async Task CheckAsyncReturnsNewerValidatedAsset()
     {
-        var json = """{"version":"1.2.0","downloadUrl":"https://updates.example/MuseRAM.exe","sha256":"AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"}""";
+        var json = """{"version":"1.2.0","downloadUrl":"https://updates.example/MuseRAM.exe","sha256":"AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA","releaseNotes":"A smoother update."}""";
         using var httpClient = new HttpClient(new StaticHandler(Encoding.UTF8.GetBytes(json)));
 
         var result = await new UpdateFeedClient(httpClient).CheckAsync(
@@ -1917,6 +1917,7 @@ public sealed class UpdateServicesTests
 
         Assert.True(result.IsAvailable);
         Assert.Equal(new Version(1, 2, 0), result.Asset!.Version);
+        Assert.Equal("A smoother update.", result.Asset.ReleaseNotes);
     }
 
     [Fact]

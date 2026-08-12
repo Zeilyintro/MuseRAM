@@ -2978,6 +2978,7 @@ public sealed class MainWindowLayoutContractTests
         var code = File.ReadAllText(CodeFixturePath());
         var update = MethodBody(code, "private async Task CheckForUpdatesAsync", "private async Task HandleAvailableUpdateAsync");
         var install = MethodBody(code, "private async Task HandleAvailableUpdateAsync", "private UpdateDialogChoice ShowUpdateDialog");
+        var dialog = MethodBody(code, "private UpdateDialogChoice ShowUpdateDialog", "private void ShowUpdateStatusDialog");
 
         var guard = update.IndexOf("if (_updateCheckInProgress || (manual && _state.IsBusy)) return;", StringComparison.Ordinal);
         var setBusy = update.IndexOf("SetBusyState(true);", StringComparison.Ordinal);
@@ -2988,6 +2989,10 @@ public sealed class MainWindowLayoutContractTests
         Assert.Contains("UpdateLauncher.LaunchReplacement(package);", install);
         Assert.True(finallyBlock > setBusy);
         Assert.True(clearBusy > finallyBlock);
+        Assert.Contains("settings.SuppressedUpdateVersion = string.Empty", update);
+        Assert.DoesNotContain("_startHidden || !IsVisible", update);
+        Assert.Contains("RefreshOverviewAttention();", update[finallyBlock..]);
+        Assert.Contains("asset.ReleaseNotes", dialog);
     }
 
     [Fact]
