@@ -5,6 +5,12 @@ namespace MuseRAM.App;
 
 public static class ExpansionMotion
 {
+    private static readonly DependencyProperty ExpandedHeightProperty = DependencyProperty.RegisterAttached(
+        "ExpandedHeight",
+        typeof(double),
+        typeof(ExpansionMotion),
+        new PropertyMetadata(0d));
+
     public static readonly DependencyProperty IsExpandedProperty = DependencyProperty.RegisterAttached(
         "IsExpanded",
         typeof(bool),
@@ -57,12 +63,14 @@ public static class ExpansionMotion
                 element.ActualWidth > 0 ? element.ActualWidth : double.PositiveInfinity,
                 double.PositiveInfinity));
             var targetHeight = Math.Max(0, element.DesiredSize.Height);
+            element.SetValue(ExpandedHeightProperty, targetHeight);
 
             element.MaxHeight = 0;
             element.Opacity = 0;
             element.IsHitTestVisible = true;
 
-            var heightAnimation = new DoubleAnimation(0, targetHeight, TimeSpan.FromMilliseconds(260))
+            var expandDuration = TimeSpan.FromMilliseconds(Math.Clamp(260 + targetHeight * 0.12, 280, 360));
+            var heightAnimation = new DoubleAnimation(0, targetHeight, expandDuration)
             {
                 EasingFunction = new CubicEase { EasingMode = EasingMode.EaseOut }
             };
@@ -74,7 +82,7 @@ public static class ExpansionMotion
             };
             element.BeginAnimation(FrameworkElement.MaxHeightProperty, heightAnimation);
             element.BeginAnimation(UIElement.OpacityProperty,
-                new DoubleAnimation(0, 1, TimeSpan.FromMilliseconds(220))
+                new DoubleAnimation(0, 1, TimeSpan.FromMilliseconds(260))
                 {
                     BeginTime = TimeSpan.FromMilliseconds(35),
                     EasingFunction = new CubicEase { EasingMode = EasingMode.EaseOut }
@@ -82,11 +90,13 @@ public static class ExpansionMotion
             return;
         }
 
-        var currentHeight = element.ActualHeight;
+        var cachedHeight = (double)element.GetValue(ExpandedHeightProperty);
+        var currentHeight = Math.Max(element.ActualHeight, cachedHeight);
         element.MaxHeight = currentHeight;
         element.Opacity = 1;
 
-        var collapseAnimation = new DoubleAnimation(currentHeight, 0, TimeSpan.FromMilliseconds(230))
+        var collapseDuration = TimeSpan.FromMilliseconds(Math.Clamp(280 + currentHeight * 0.16, 300, 440));
+        var collapseAnimation = new DoubleAnimation(currentHeight, 0, collapseDuration)
         {
             EasingFunction = new CubicEase { EasingMode = EasingMode.EaseIn }
         };
@@ -101,8 +111,9 @@ public static class ExpansionMotion
         };
         element.BeginAnimation(FrameworkElement.MaxHeightProperty, collapseAnimation);
         element.BeginAnimation(UIElement.OpacityProperty,
-            new DoubleAnimation(1, 0, TimeSpan.FromMilliseconds(180))
+            new DoubleAnimation(1, 0, TimeSpan.FromMilliseconds(160))
             {
+                BeginTime = TimeSpan.FromTicks((long)(collapseDuration.Ticks * 0.55)),
                 EasingFunction = new CubicEase { EasingMode = EasingMode.EaseInOut }
             });
     }

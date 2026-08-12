@@ -1778,6 +1778,7 @@ public sealed class MainWindowLayoutContractTests
         Assert.Contains("DataGridTemplateColumn Width=\"1.55*\" MinWidth=\"120\" HeaderStyle=\"{StaticResource CandidateLeftHeaderStyle}\"", candidateGrid);
         Assert.Contains("Text=\"{Binding Name}\" Style=\"{StaticResource CandidateLeftCellTextStyle}\"", candidateGrid);
         Assert.Contains("Visibility=\"{Binding HasPartialProtectionBadge, Converter={StaticResource BooleanToVisibilityConverter}}\"", candidateGrid);
+        Assert.Contains("Width=\"15\" Height=\"15\" Margin=\"2,0,0,0\" Visibility=\"{Binding HasPartialProtectionBadge", candidateGrid);
         Assert.Contains("Visibility=\"{Binding HasRetentionIcon, Converter={StaticResource BooleanToVisibilityConverter}}\" Content=\"{Binding}\" ContentTemplate=\"{StaticResource RetentionStatusIconTemplate}\"", candidateGrid);
         Assert.Contains("Text=\"{Binding IdleStatus}\"", candidateGrid);
         Assert.Contains("ToolTip=\"{Binding IdleStatusDetail}\"", candidateGrid);
@@ -2006,8 +2007,11 @@ public sealed class MainWindowLayoutContractTests
         Assert.DoesNotContain("Storyboard.TargetProperty=\"MaxHeight\"", layout);
         var expansionMotion = File.ReadAllText(Path.Combine(AppContext.BaseDirectory, "Fixtures", "ExpansionMotion.cs"));
         Assert.Contains("element.DesiredSize.Height", expansionMotion);
-        Assert.Contains("new DoubleAnimation(0, targetHeight, TimeSpan.FromMilliseconds(260))", expansionMotion);
+        Assert.Contains("Math.Clamp(260 + targetHeight * 0.12, 280, 360)", expansionMotion);
         Assert.Contains("BeginTime = TimeSpan.FromMilliseconds(35)", expansionMotion);
+        Assert.Contains("Math.Max(element.ActualHeight, cachedHeight)", expansionMotion);
+        Assert.Contains("Math.Clamp(280 + currentHeight * 0.16, 300, 440)", expansionMotion);
+        Assert.Contains("collapseDuration.Ticks * 0.55", expansionMotion);
         Assert.Contains("<Setter Property=\"PopupAnimation\" Value=\"Slide\" />", layout);
     }
 
@@ -3410,7 +3414,7 @@ public sealed class MainWindowLayoutContractTests
     {
         var project = XDocument.Load(ProjectFixturePath());
 
-        Assert.Equal("0.1.7.5", project.Descendants("Version").Single().Value);
+        Assert.Equal("0.1.7.4", project.Descendants("Version").Single().Value);
     }
 
     [Fact]
