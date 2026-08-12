@@ -9,6 +9,7 @@ using System.Windows.Automation;
 using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
 using System.Windows.Media;
+using System.Windows.Media.Media3D;
 using System.Windows.Interop;
 using System.Windows.Threading;
 using Microsoft.Win32;
@@ -1215,7 +1216,8 @@ public partial class MainWindow : Window
         var minimumWorkingSetBytes = settings?.MinimumFamilyWorkingSetBytes ?? 0;
         var idleStatus = FormatIdleStatus(activityFamily, activity);
         if (!string.Equals(idleStatus, activity, StringComparison.Ordinal) &&
-            retentionIndicator is ProcessRetentionIndicator.None)
+            retentionIndicator is ProcessRetentionIndicator.None or
+                ProcessRetentionIndicator.PartialProtection)
         {
             retentionIcon = RetentionStatusIcon.Idle;
         }
@@ -1405,7 +1407,7 @@ public partial class MainWindow : Window
 
     private static bool IsDescendantOf(DependencyObject source, DependencyObject ancestor)
     {
-        for (var current = source; current is not null; current = VisualTreeHelper.GetParent(current))
+        for (var current = source; current is not null; current = ParentOf(current))
         {
             if (ReferenceEquals(current, ancestor)) return true;
         }
@@ -1414,12 +1416,20 @@ public partial class MainWindow : Window
 
     private static Button? FindAncestorButton(DependencyObject source)
     {
-        for (var current = source; current is not null; current = VisualTreeHelper.GetParent(current))
+        for (var current = source; current is not null; current = ParentOf(current))
         {
             if (current is Button button) return button;
         }
         return null;
     }
+
+    private static DependencyObject? ParentOf(DependencyObject current) => current switch
+    {
+        Visual or Visual3D => VisualTreeHelper.GetParent(current),
+        FrameworkContentElement content => content.Parent,
+        ContentElement content => ContentOperations.GetParent(content),
+        _ => LogicalTreeHelper.GetParent(current)
+    };
 
     private Popup? ResolveManagedPopup(Button button) =>
         ReferenceEquals(button, ScheduleMenuButton) ? SchedulePopup
@@ -1460,16 +1470,7 @@ public partial class MainWindow : Window
 
     private bool TryClosePopupFromTrigger(DependencyObject source)
     {
-        Button? button = null;
-        for (var current = source; current is not null; current = VisualTreeHelper.GetParent(current))
-        {
-            if (current is Button candidate)
-            {
-                button = candidate;
-                break;
-            }
-        }
-
+        var button = FindAncestorButton(source);
         if (button is null) return false;
         Popup? popup = ReferenceEquals(button, ScheduleMenuButton) ? SchedulePopup
             : ReferenceEquals(button, CandidateModeMenuButton) ? CandidateModePopup
@@ -9873,7 +9874,7 @@ public partial class MainWindow : Window
 
     private void RefreshProtectedList()
     {
-        if (_openApplicationRulePopups.Count > 0) return;
+        if (_openApplicationRulePopups.Count > 0 || ExpansionMotion.IsAnyAnimationActive) return;
         var expandedKeys = _state.ProtectedApplications
             .Where(group => group.IsExpanded)
             .Select(group => group.Key)

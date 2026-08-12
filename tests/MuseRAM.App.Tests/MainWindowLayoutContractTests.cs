@@ -164,7 +164,8 @@ public sealed class MainWindowLayoutContractTests
 
         Assert.Equal(2, CountOccurrences(layout, "Opened=\"ApplicationRulePopup_OnOpened\""));
         Assert.Contains("_openApplicationRulePopups", code);
-        Assert.Contains("if (_openApplicationRulePopups.Count > 0) return;", refresh);
+        Assert.Contains("_openApplicationRulePopups.Count > 0", refresh);
+        Assert.Contains("ExpansionMotion.IsAnyAnimationActive", refresh);
     }
 
     [Fact]
@@ -1778,10 +1779,14 @@ public sealed class MainWindowLayoutContractTests
         Assert.Contains("DataGridTemplateColumn Width=\"1.55*\" MinWidth=\"120\" HeaderStyle=\"{StaticResource CandidateLeftHeaderStyle}\"", candidateGrid);
         Assert.Contains("Text=\"{Binding Name}\" Style=\"{StaticResource CandidateLeftCellTextStyle}\"", candidateGrid);
         Assert.Contains("Visibility=\"{Binding HasPartialProtectionBadge, Converter={StaticResource BooleanToVisibilityConverter}}\"", candidateGrid);
-        Assert.Contains("Width=\"15\" Height=\"15\" Margin=\"2,0,0,0\" Visibility=\"{Binding HasPartialProtectionBadge", candidateGrid);
+        Assert.Contains("Margin=\"8,0,0,0\" TextTrimming=\"CharacterEllipsis\"", candidateGrid);
+        Assert.Contains("Width=\"15\" Height=\"15\" Margin=\"4,0,0,0\" Visibility=\"{Binding HasPartialProtectionBadge", candidateGrid);
         Assert.Contains("Visibility=\"{Binding HasRetentionIcon, Converter={StaticResource BooleanToVisibilityConverter}}\" Content=\"{Binding}\" ContentTemplate=\"{StaticResource RetentionStatusIconTemplate}\"", candidateGrid);
         Assert.Contains("Text=\"{Binding IdleStatus}\"", candidateGrid);
         Assert.Contains("ToolTip=\"{Binding IdleStatusDetail}\"", candidateGrid);
+        Assert.Contains("<TranslateTransform Y=\"0\" />", layout);
+        Assert.Contains("<Setter Property=\"Width\" Value=\"14\" />", layout);
+        Assert.Contains("<Grid Width=\"14\" Height=\"14\">", layout);
         Assert.Contains("Binding=\"{Binding AutoOptimizationStatus}\" Width=\"1.5*\" MinWidth=\"120\"", layout);
         Assert.Contains("<Setter Property=\"ToolTip\" Value=\"{Binding Text, RelativeSource={RelativeSource Self}}\" />", layout);
         foreach (var binding in new[] { "Memory", "Ranking", "AutoOptimizationStatus" })
@@ -2007,11 +2012,11 @@ public sealed class MainWindowLayoutContractTests
         Assert.DoesNotContain("Storyboard.TargetProperty=\"MaxHeight\"", layout);
         var expansionMotion = File.ReadAllText(Path.Combine(AppContext.BaseDirectory, "Fixtures", "ExpansionMotion.cs"));
         Assert.Contains("element.DesiredSize.Height", expansionMotion);
-        Assert.Contains("Math.Clamp(260 + targetHeight * 0.12, 280, 360)", expansionMotion);
+        Assert.Contains("MotionDuration(targetHeight)", expansionMotion);
         Assert.Contains("BeginTime = TimeSpan.FromMilliseconds(35)", expansionMotion);
         Assert.Contains("Math.Max(element.ActualHeight, cachedHeight)", expansionMotion);
-        Assert.Contains("Math.Clamp(280 + currentHeight * 0.16, 300, 440)", expansionMotion);
-        Assert.Contains("collapseDuration.Ticks * 0.55", expansionMotion);
+        Assert.Contains("MotionDuration(currentHeight)", expansionMotion);
+        Assert.Contains("TimeSpan.FromMilliseconds(340)", expansionMotion);
         Assert.Contains("<Setter Property=\"PopupAnimation\" Value=\"Slide\" />", layout);
     }
 
@@ -2462,6 +2467,7 @@ public sealed class MainWindowLayoutContractTests
         Assert.Contains("x:Name=\"ActivityObservingIcon\"", layout);
         Assert.Contains("RetentionStatusIcon.ActivityObserving", layout);
         Assert.Contains("string.Equals(row.IdleStatus, T(\"ActivityMinimized\"), StringComparison.Ordinal)", code);
+        Assert.Contains("ProcessRetentionIndicator.PartialProtection", code);
         Assert.Contains("row = row with { RetentionIcon = RetentionStatusIcon.ActivityObserving };", code);
         Assert.Contains("IconEye", resources);
         Assert.Contains("ProcessRetentionIndicator.AutomaticBackoff => RetentionStatusIcon.Backoff", code);
@@ -2580,6 +2586,7 @@ public sealed class MainWindowLayoutContractTests
         var equalityCheck = method.IndexOf("ProtectedGroupsEqual(", StringComparison.Ordinal);
         var replace = method.IndexOf("ReplaceCollection(_state.ProtectedApplications", StringComparison.Ordinal);
         Assert.True(equalityCheck >= 0 && replace > equalityCheck);
+        Assert.Contains("ExpansionMotion.IsAnyAnimationActive", method);
         Assert.DoesNotContain("ProtectedPathEntries", method);
         Assert.DoesNotContain("ProtectedApplications.Clear()", method);
     }
@@ -3401,6 +3408,37 @@ public sealed class MainWindowLayoutContractTests
     }
 
     [Fact]
+    public void PointerAncestorTraversalSupportsInlineTextContent()
+    {
+        var code = File.ReadAllText(CodeFixturePath());
+        var descendantMethod = MethodBody(
+            code,
+            "private static bool IsDescendantOf",
+            "private static Button? FindAncestorButton");
+        var buttonMethod = MethodBody(
+            code,
+            "private static Button? FindAncestorButton",
+            "private static DependencyObject? ParentOf");
+        var parentMethod = MethodBody(
+            code,
+            "private static DependencyObject? ParentOf",
+            "private Popup? ResolveManagedPopup");
+
+        Assert.Contains("ParentOf(current)", descendantMethod);
+        Assert.Contains("ParentOf(current)", buttonMethod);
+        Assert.Contains("FrameworkContentElement content => content.Parent", parentMethod);
+        Assert.Contains("ContentElement content => ContentOperations.GetParent(content)", parentMethod);
+        Assert.Contains("Visual or Visual3D => VisualTreeHelper.GetParent(current)", parentMethod);
+
+        var popupTriggerMethod = MethodBody(
+            code,
+            "private bool TryClosePopupFromTrigger",
+            "private bool ConsumeSuppressedPopupTriggerClick");
+        Assert.Contains("FindAncestorButton(source)", popupTriggerMethod);
+        Assert.DoesNotContain("VisualTreeHelper.GetParent", popupTriggerMethod);
+    }
+
+    [Fact]
     public void ApplicationUsesPerMonitorV2DpiMode()
     {
         var project = XDocument.Load(ProjectFixturePath());
@@ -3414,7 +3452,7 @@ public sealed class MainWindowLayoutContractTests
     {
         var project = XDocument.Load(ProjectFixturePath());
 
-        Assert.Equal("0.1.7.4", project.Descendants("Version").Single().Value);
+        Assert.Equal("0.1.7.5", project.Descendants("Version").Single().Value);
     }
 
     [Fact]

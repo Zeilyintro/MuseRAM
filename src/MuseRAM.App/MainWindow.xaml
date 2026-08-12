@@ -1316,6 +1316,7 @@
       <Setter Property="Height" Value="14" />
       <Setter Property="Margin" Value="0,0,5,0" />
       <Setter Property="VerticalAlignment" Value="Center" />
+      <Setter Property="RenderTransform"><Setter.Value><TranslateTransform Y="0" /></Setter.Value></Setter>
     </Style>
     <Style x:Key="AnimatedExpansionItemsStyle" TargetType="ItemsControl">
       <Setter Property="Opacity" Value="0" />
@@ -1819,7 +1820,7 @@
                   <DataGrid.Columns>
                     <DataGridTemplateColumn Width="1.55*" MinWidth="120" HeaderStyle="{StaticResource CandidateLeftHeaderStyle}">
                       <DataGridTemplateColumn.Header><TextBlock Text="{DynamicResource Application}" /></DataGridTemplateColumn.Header>
-                      <DataGridTemplateColumn.CellTemplate><DataTemplate><StackPanel Orientation="Horizontal" VerticalAlignment="Center"><TextBlock Text="{Binding Name}" Style="{StaticResource CandidateLeftCellTextStyle}" TextTrimming="CharacterEllipsis"/><Path Style="{StaticResource LucideIconPathStyle}" Data="{StaticResource IconShieldPartial}" Stroke="{DynamicResource AccentBrush}" Width="15" Height="15" Margin="2,0,0,0" Visibility="{Binding HasPartialProtectionBadge, Converter={StaticResource BooleanToVisibilityConverter}}" ToolTip="{DynamicResource CandidatePartialProtectionHelp}"/></StackPanel></DataTemplate></DataGridTemplateColumn.CellTemplate>
+                      <DataGridTemplateColumn.CellTemplate><DataTemplate><StackPanel Orientation="Horizontal" VerticalAlignment="Center"><TextBlock Text="{Binding Name}" Style="{StaticResource CandidateLeftCellTextStyle}" Margin="8,0,0,0" TextTrimming="CharacterEllipsis"/><Path Style="{StaticResource LucideIconPathStyle}" Data="{StaticResource IconShieldPartial}" Stroke="{DynamicResource AccentBrush}" Width="15" Height="15" Margin="4,0,0,0" Visibility="{Binding HasPartialProtectionBadge, Converter={StaticResource BooleanToVisibilityConverter}}" ToolTip="{DynamicResource CandidatePartialProtectionHelp}"/></StackPanel></DataTemplate></DataGridTemplateColumn.CellTemplate>
                     </DataGridTemplateColumn>
                     <DataGridTextColumn Binding="{Binding Memory}" Width="1.35*" MinWidth="130" HeaderStyle="{StaticResource CandidateCenterHeaderStyle}" ElementStyle="{StaticResource CandidateMemoryCellTextStyle}"><DataGridTextColumn.Header><TextBlock Text="{DynamicResource CandidateMemory}" ToolTip="{DynamicResource CandidateMemoryHelp}" /></DataGridTextColumn.Header></DataGridTextColumn>
                     <DataGridTemplateColumn Width="1.45*" MinWidth="130" HeaderStyle="{StaticResource CandidateCenterHeaderStyle}">
@@ -1969,14 +1970,11 @@
                             </Button>
                              <ToggleButton Grid.Column="4" Style="{StaticResource ExpandButtonStyle}"
                                           IsChecked="{Binding IsExpanded, Mode=TwoWay}" IsEnabled="{Binding HasExecutables}" ToolTip="{DynamicResource ExpandProtectedExecutables}">
-                              <TextBlock FontFamily="{StaticResource IconFontFamily}" FontSize="14" Foreground="{Binding Foreground, RelativeSource={RelativeSource AncestorType=ToggleButton}}">
-                                <TextBlock.Style>
-                                  <Style TargetType="TextBlock">
-                                    <Setter Property="Text" Value="&#xE76C;" />
-                                    <Style.Triggers><DataTrigger Binding="{Binding IsExpanded}" Value="True"><Setter Property="Text" Value="&#xE70D;" /></DataTrigger></Style.Triggers>
-                                  </Style>
-                                </TextBlock.Style>
-                              </TextBlock>
+                              <Path Width="13" Height="13" Data="{StaticResource IconChevronDown}" RenderTransformOrigin="0.5,0.5"
+                                    Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=ToggleButton}}"
+                                    StrokeThickness="1.5" StrokeStartLineCap="Round" StrokeEndLineCap="Round" StrokeLineJoin="Round" Stretch="Uniform">
+                                <Path.Style><Style TargetType="Path" BasedOn="{StaticResource ButtonIconPathStyle}"><Setter Property="RenderTransform"><Setter.Value><RotateTransform Angle="-90" /></Setter.Value></Setter><Style.Triggers><DataTrigger Binding="{Binding IsExpanded}" Value="True"><Setter Property="RenderTransform"><Setter.Value><RotateTransform Angle="0" /></Setter.Value></Setter></DataTrigger></Style.Triggers></Style></Path.Style>
+                              </Path>
                              </ToggleButton>
                              <Button x:Name="ProtectedGroupRuleMenuButton" Grid.Column="5" Tag="{Binding}" Style="{StaticResource ExpandCommandButtonStyle}"
                                      ToolTip="{DynamicResource ApplicationRuleMenu}" AutomationProperties.Name="{DynamicResource ApplicationRuleMenu}"
@@ -2012,22 +2010,19 @@
                               <DataTemplate>
                                 <Grid Margin="0,4">
                                   <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
-                                  <Grid>
+                                  <Grid VerticalAlignment="Center">
                                      <Grid.ColumnDefinitions><ColumnDefinition Width="30"/><ColumnDefinition Width="150"/><ColumnDefinition Width="*"/><ColumnDefinition Width="90"/><ColumnDefinition Width="34"/><ColumnDefinition Width="34"/></Grid.ColumnDefinitions>
-                                    <ToggleButton Style="{StaticResource ExpandButtonStyle}" Width="26" Height="26"
+                                    <ToggleButton Style="{StaticResource ExpandButtonStyle}" Width="26" Height="26" VerticalAlignment="Center"
                                                   IsChecked="{Binding IsExpanded, Mode=TwoWay}" IsEnabled="{Binding HasProcesses}" ToolTip="{DynamicResource ExpandExecutableProcesses}">
-                                      <TextBlock FontFamily="{StaticResource IconFontFamily}" FontSize="13" Foreground="{Binding Foreground, RelativeSource={RelativeSource AncestorType=ToggleButton}}">
-                                        <TextBlock.Style>
-                                          <Style TargetType="TextBlock">
-                                            <Setter Property="Text" Value="&#xE76C;" />
-                                            <Style.Triggers><DataTrigger Binding="{Binding IsExpanded}" Value="True"><Setter Property="Text" Value="&#xE70D;" /></DataTrigger></Style.Triggers>
-                                          </Style>
-                                        </TextBlock.Style>
-                                      </TextBlock>
+                                      <Path Width="13" Height="13" Data="{StaticResource IconChevronDown}" RenderTransformOrigin="0.5,0.5"
+                                            Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=ToggleButton}}"
+                                            StrokeThickness="1.5" StrokeStartLineCap="Round" StrokeEndLineCap="Round" StrokeLineJoin="Round" Stretch="Uniform">
+                                        <Path.Style><Style TargetType="Path" BasedOn="{StaticResource ButtonIconPathStyle}"><Setter Property="RenderTransform"><Setter.Value><RotateTransform Angle="-90" /></Setter.Value></Setter><Style.Triggers><DataTrigger Binding="{Binding IsExpanded}" Value="True"><Setter Property="RenderTransform"><Setter.Value><RotateTransform Angle="0" /></Setter.Value></Setter></DataTrigger></Style.Triggers></Style></Path.Style>
+                                      </Path>
                                     </ToggleButton>
-                                    <TextBlock Grid.Column="1"><Run Text="{Binding Name, Mode=OneWay}"/><Run Text=" · "/><Run Text="{Binding InstanceCount, Mode=OneWay}"/><Run Text=" "/><Run Text="{DynamicResource ProtectedInstancesUnit}"/></TextBlock>
-                                    <TextBlock Grid.Column="2" Text="{Binding Path}" Style="{StaticResource CaptionStyle}" TextTrimming="CharacterEllipsis" />
-                                    <TextBlock Grid.Column="3" Text="{Binding Memory}" Style="{StaticResource CaptionStyle}" HorizontalAlignment="Right" />
+                                    <TextBlock Grid.Column="1" VerticalAlignment="Center"><Run Text="{Binding Name, Mode=OneWay}"/><Run Text=" · "/><Run Text="{Binding InstanceCount, Mode=OneWay}"/><Run Text=" "/><Run Text="{DynamicResource ProtectedInstancesUnit}"/></TextBlock>
+                                    <TextBlock Grid.Column="2" Text="{Binding Path}" Style="{StaticResource CaptionStyle}" TextTrimming="CharacterEllipsis" VerticalAlignment="Center" />
+                                    <TextBlock Grid.Column="3" Text="{Binding Memory}" Style="{StaticResource CaptionStyle}" HorizontalAlignment="Right" VerticalAlignment="Center" />
                                      <Button Grid.Column="4" Tag="{Binding}" Style="{StaticResource ExpandCommandButtonStyle}" Width="28" Height="28" Margin="6,0,0,0"
                                             IsEnabled="{Binding IsRunning}" ToolTip="{DynamicResource OptimizeProtectedExecutableOnce}"
                                             Click="OptimizeProtectedExecutable_OnClick">

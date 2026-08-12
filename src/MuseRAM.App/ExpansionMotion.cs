@@ -5,6 +5,9 @@ namespace MuseRAM.App;
 
 public static class ExpansionMotion
 {
+    private static int _activeAnimationCount;
+    public static bool IsAnyAnimationActive => _activeAnimationCount > 0;
+
     private static readonly DependencyProperty ExpandedHeightProperty = DependencyProperty.RegisterAttached(
         "ExpandedHeight",
         typeof(double),
@@ -45,6 +48,7 @@ public static class ExpansionMotion
 
     private static void Apply(FrameworkElement element, bool expanded, bool animate)
     {
+        EndAnimation(element);
         element.BeginAnimation(UIElement.OpacityProperty, null);
         element.BeginAnimation(FrameworkElement.MaxHeightProperty, null);
 
@@ -69,17 +73,19 @@ public static class ExpansionMotion
             element.Opacity = 0;
             element.IsHitTestVisible = true;
 
-            var expandDuration = TimeSpan.FromMilliseconds(Math.Clamp(260 + targetHeight * 0.12, 280, 360));
+            var expandDuration = MotionDuration(targetHeight);
             var heightAnimation = new DoubleAnimation(0, targetHeight, expandDuration)
             {
                 EasingFunction = new CubicEase { EasingMode = EasingMode.EaseOut }
             };
             heightAnimation.Completed += (_, _) =>
             {
+                EndAnimation(element);
                 if (!GetIsExpanded(element)) return;
                 element.BeginAnimation(FrameworkElement.MaxHeightProperty, null);
                 element.MaxHeight = double.PositiveInfinity;
             };
+            BeginAnimation(element);
             element.BeginAnimation(FrameworkElement.MaxHeightProperty, heightAnimation);
             element.BeginAnimation(UIElement.OpacityProperty,
                 new DoubleAnimation(0, 1, TimeSpan.FromMilliseconds(260))
@@ -95,13 +101,14 @@ public static class ExpansionMotion
         element.MaxHeight = currentHeight;
         element.Opacity = 1;
 
-        var collapseDuration = TimeSpan.FromMilliseconds(Math.Clamp(280 + currentHeight * 0.16, 300, 440));
+        var collapseDuration = MotionDuration(currentHeight);
         var collapseAnimation = new DoubleAnimation(currentHeight, 0, collapseDuration)
         {
             EasingFunction = new CubicEase { EasingMode = EasingMode.EaseIn }
         };
         collapseAnimation.Completed += (_, _) =>
         {
+            EndAnimation(element);
             if (GetIsExpanded(element)) return;
             element.BeginAnimation(FrameworkElement.MaxHeightProperty, null);
             element.BeginAnimation(UIElement.OpacityProperty, null);
@@ -109,12 +116,34 @@ public static class ExpansionMotion
             element.Opacity = 0;
             element.IsHitTestVisible = false;
         };
+        BeginAnimation(element);
         element.BeginAnimation(FrameworkElement.MaxHeightProperty, collapseAnimation);
         element.BeginAnimation(UIElement.OpacityProperty,
-            new DoubleAnimation(1, 0, TimeSpan.FromMilliseconds(160))
+            new DoubleAnimation(1, 0, collapseDuration)
             {
-                BeginTime = TimeSpan.FromTicks((long)(collapseDuration.Ticks * 0.55)),
                 EasingFunction = new CubicEase { EasingMode = EasingMode.EaseInOut }
             });
     }
+
+    private static TimeSpan MotionDuration(double height) => TimeSpan.FromMilliseconds(340);
+
+    private static void BeginAnimation(FrameworkElement element)
+    {
+        if ((bool)element.GetValue(AnimationActiveProperty)) return;
+        element.SetValue(AnimationActiveProperty, true);
+        _activeAnimationCount++;
+    }
+
+    private static void EndAnimation(FrameworkElement element)
+    {
+        if (!(bool)element.GetValue(AnimationActiveProperty)) return;
+        element.SetValue(AnimationActiveProperty, false);
+        _activeAnimationCount = Math.Max(0, _activeAnimationCount - 1);
+    }
+
+    private static readonly DependencyProperty AnimationActiveProperty = DependencyProperty.RegisterAttached(
+        "AnimationActive",
+        typeof(bool),
+        typeof(ExpansionMotion),
+        new PropertyMetadata(false));
 }
