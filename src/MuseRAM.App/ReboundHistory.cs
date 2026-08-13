@@ -9,7 +9,8 @@ public enum OptimizationRunKind
     Automatic,
     Scheduled,
     LongIdle,
-    ApplicationRule
+    ApplicationRule,
+    GlobalReclaim
 }
 
 public enum ReboundObservationState

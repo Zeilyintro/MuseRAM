@@ -526,6 +526,7 @@ public sealed record NaturalStableStateSnapshot(
     public string FamilyScopeLaunchSignature { get; init; } = string.Empty;
     public long FamilyScopeWorkingSetBytes { get; init; }
     public bool FamilyScopeIsForeground { get; init; }
+    public bool RequiresFirstBootAnchorGate { get; init; }
 }
 
 public sealed record NaturalStableScopeRequest(
@@ -541,6 +542,7 @@ public enum NaturalStableObservationOrigin
 {
     Unknown,
     PostTrim,
+    GlobalReclaim,
     BackoffRecovery,
     HistoricalBoundedConfirmation
 }
@@ -573,6 +575,7 @@ public sealed record NaturalStableObservationStatus(
     public DateTimeOffset? ValidationDeadline { get; init; }
     public DateTimeOffset? ContinuousStableSince { get; init; }
     public long? ValidationUpperLimitBytes { get; init; }
+    public bool RequiresFirstBootAnchorGate { get; init; }
     public bool HasFiniteDeadline => Deadline != DateTimeOffset.MaxValue;
 }
 
@@ -583,6 +586,11 @@ public sealed record NaturalStableReviewSchedule(
     int HighMigrationRecoveryCycleCount,
     int RequiredHighMigrationRecoveryCycles,
     bool AwaitingNewRecoveryCycle);
+
+public sealed record HistoricalReviewSessionProgress(
+    string ScopeKey,
+    string LaunchSignature,
+    int CompletedReviewCount);
 
 public sealed record NaturalStableTimedSampleProgress(
     DateTimeOffset ObservedAt,

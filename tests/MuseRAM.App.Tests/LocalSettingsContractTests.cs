@@ -75,6 +75,10 @@ public sealed class LocalSettingsContractTests
         Assert.False(settings.AutoOptimization);
         Assert.False(settings.ScheduledOptimizationEnabled);
         Assert.Equal(60, settings.ScheduledOptimizationIntervalMinutes);
+        Assert.False(settings.GlobalReclaimIntervalEnabled);
+        Assert.Equal(60, settings.GlobalReclaimIntervalMinutes);
+        Assert.False(settings.GlobalReclaimStartupDelayEnabled);
+        Assert.Equal(5, settings.GlobalReclaimStartupDelayMinutes);
         Assert.False(settings.LongIdleOptimizationEnabled);
         Assert.Equal(60, settings.LongIdleOptimizationMinutes);
         Assert.False(settings.StartWithWindows);

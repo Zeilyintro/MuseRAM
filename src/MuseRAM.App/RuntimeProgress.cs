@@ -46,12 +46,15 @@ public sealed record RuntimeProgressDocument(
     double? AutomaticSafetyElapsedSeconds,
     long CumulativeTrimBytes,
     long CumulativeNetGainBytes,
+    long? RecentTrimBytes,
+    long? RecentNetGainBytes,
     IReadOnlyList<RuntimeActivityProgress> Activities,
     IReadOnlyList<RuntimeTrimProgress> TrimHistory,
     IReadOnlyList<ApplicationBackoffProgress> Backoffs,
     double SessionUptimeSeconds = 0,
     IReadOnlyList<ApplicationOptimizationRuleTargetProgress>? ApplicationRuleTargets = null,
-    IReadOnlyList<NaturalStableObservationProgress>? NaturalStableObservations = null);
+    IReadOnlyList<NaturalStableObservationProgress>? NaturalStableObservations = null,
+    IReadOnlyList<HistoricalReviewSessionProgress>? HistoricalReviewSessions = null);
 
 public sealed record RuntimeProgressLoadResult(
     RuntimeProgressDocument? Progress,
@@ -59,7 +62,7 @@ public sealed record RuntimeProgressLoadResult(
 
 public sealed class RuntimeProgressStore
 {
-    public const int CurrentSchemaVersion = 4;
+    public const int CurrentSchemaVersion = 5;
     private const int MaximumEntries = 512;
     private static readonly JsonSerializerOptions JsonOptions = new() { WriteIndented = true };
     private readonly string _path;
@@ -122,6 +125,9 @@ public sealed class RuntimeProgressStore
             : null,
         SessionUptimeSeconds = RuntimeProgressPolicy.NormalizeDurationSeconds(progress.SessionUptimeSeconds),
         CumulativeTrimBytes = Math.Max(0, progress.CumulativeTrimBytes),
+        RecentTrimBytes = progress.RecentTrimBytes is { } recentTrim
+            ? Math.Max(0, recentTrim)
+            : null,
         Activities = (progress.Activities ?? Array.Empty<RuntimeActivityProgress>())
             .Where(item => !string.IsNullOrWhiteSpace(item.FamilyKey) &&
                            item.AnchorProcessId > 0 && item.AnchorProcessStartTimeFileTimeUtc > 0 &&
@@ -207,6 +213,16 @@ public sealed class RuntimeProgressStore
                     .ToArray()
             })
             .Where(item => item.ComponentKeys.Count > 0 && item.WorkingSetSamples.Count > 0)
+            .Take(MaximumEntries)
+            .ToArray(),
+        HistoricalReviewSessions = (progress.HistoricalReviewSessions ??
+                                    Array.Empty<HistoricalReviewSessionProgress>())
+            .Where(item => !string.IsNullOrWhiteSpace(item.ScopeKey) &&
+                           !string.IsNullOrWhiteSpace(item.LaunchSignature))
+            .Select(item => item with
+            {
+                CompletedReviewCount = Math.Clamp(item.CompletedReviewCount, 0, 3)
+            })
             .Take(MaximumEntries)
             .ToArray()
     };

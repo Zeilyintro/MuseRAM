@@ -64,9 +64,16 @@ public sealed class MainWindowLayoutContractTests
         Assert.Contains("CloseManagedPopups(popup);", code);
         Assert.Contains("popup.IsOpen = open;", code);
         Assert.Contains("e.Handled = true;", code);
-        Assert.Equal(5, CountOccurrences(layout, "PreviewMouseLeftButtonDown=\"ManagedPopupTrigger_OnPreviewMouseLeftButtonDown\""));
-        Assert.Equal(5, CountOccurrences(layout, "StaysOpen=\"True\""));
-        Assert.True(CountOccurrences(code, "ConsumeSuppressedPopupTriggerClick(sender)") >= 5);
+        Assert.Contains("if (IsInsideOpenManagedPopup(source)) return;", code);
+        Assert.Contains("IsInsidePopup(source, SchedulePopup)", code);
+        Assert.Contains("IsInsidePopup(source, GlobalReclaimSchedulePopup)", code);
+        Assert.Contains("IsInsidePopup(source, CandidateModePopup)", code);
+        Assert.Contains("IsInsidePopup(source, UpdateFrequencyPopup)", code);
+        Assert.Contains("_openApplicationRulePopups.Any(popup => IsInsidePopup(source, popup))", code);
+        Assert.Contains("popup.IsOpen && popup.Child is DependencyObject content && IsDescendantOf(source, content)", code);
+        Assert.Equal(6, CountOccurrences(layout, "PreviewMouseLeftButtonDown=\"ManagedPopupTrigger_OnPreviewMouseLeftButtonDown\""));
+        Assert.Equal(6, CountOccurrences(layout, "StaysOpen=\"True\""));
+        Assert.True(CountOccurrences(code, "ConsumeSuppressedPopupTriggerClick(sender)") >= 6);
         Assert.Contains("var suppressHistoryButtonClick = false;", code);
         Assert.Contains("suppressHistoryButtonClick = true;", code);
         Assert.Contains("if (suppressHistoryButtonClick)", code);
@@ -74,7 +81,7 @@ public sealed class MainWindowLayoutContractTests
         Assert.Contains("x:Key=\"FadePopupStyle\"", layout);
         Assert.Contains("x:Name=\"SchedulePopup\" Style=\"{StaticResource FadePopupStyle}\"", layout);
         Assert.Contains("x:Name=\"CandidateModePopup\" Style=\"{StaticResource FadePopupStyle}\"", layout);
-        Assert.Equal(5, CountOccurrences(layout, "Style=\"{StaticResource FadePopupStyle}\""));
+        Assert.Equal(6, CountOccurrences(layout, "Style=\"{StaticResource FadePopupStyle}\""));
     }
 
     [Fact]
@@ -427,9 +434,8 @@ public sealed class MainWindowLayoutContractTests
         Assert.Contains("DataGridTemplateColumn Width=\"110\"", processesPage);
         Assert.Contains("ContentTemplate=\"{StaticResource RetentionStatusIconTemplate}\"", processesPage);
         Assert.Contains("Text=\"{Binding Protection}\" Style=\"{StaticResource ProcessRetentionCellTextStyle}\"", processesPage);
-        Assert.Equal(2, processesPage.Split(
-            "HeaderStyle=\"{StaticResource CandidateLeftHeaderStyle}\" ElementStyle=\"{StaticResource CandidateLeftCellTextStyle}\"",
-            StringSplitOptions.None).Length - 1);
+        Assert.Contains("IconShieldPartial", processesPage);
+        Assert.Contains("HasPartialProtectionBadge", processesPage);
     }
 
     [Fact]
@@ -437,8 +443,10 @@ public sealed class MainWindowLayoutContractTests
     {
         var text = File.ReadAllText(FixturePath());
 
-        Assert.Contains("x:Name=\"DeepReleaseButton\" Grid.Row=\"3\" Style=\"{StaticResource DangerButtonStyle}\"", text);
-        Assert.Contains("Height=\"30\" Padding=\"14,0\" Margin=\"0,12,0,0\"", text);
+        Assert.Contains("x:Name=\"DeepReleaseButton\" Grid.Column=\"0\" Style=\"{StaticResource DangerButtonStyle}\"", text);
+        Assert.Contains("x:Name=\"GlobalReclaimButton\" Grid.Column=\"0\" Tag=\"Left\" Style=\"{StaticResource PrimarySplitButtonStyle}\"", text);
+        Assert.Contains("x:Name=\"GlobalReclaimSchedulePopup\" Style=\"{StaticResource FadePopupStyle}\"", text);
+        Assert.Contains("<Grid Grid.Row=\"3\" Margin=\"0,12,0,0\">", text);
         Assert.Contains("HorizontalAlignment=\"Stretch\"", text);
         Assert.Contains("x:Name=\"SettingsBenefitLearningStatus\"", text);
         Assert.DoesNotContain("<StackPanel VerticalAlignment=\"Center\"><TextBlock Text=\"{DynamicResource IntelligentCandidateSelection}\" FontWeight=\"SemiBold\"/><TextBlock Text=\"{Binding BenefitLearningStatus}\"", text);
@@ -812,6 +820,8 @@ public sealed class MainWindowLayoutContractTests
                 .Select(element => (string?)element.Attribute("Text")));
         Assert.Equal("Hidden", (string?)summaryScroller.Attribute("HorizontalScrollBarVisibility"));
         Assert.Equal("Disabled", (string?)summaryScroller.Attribute("VerticalScrollBarVisibility"));
+        Assert.Equal("StableAnchorSummaryScroller_OnPreviewMouseWheel",
+            (string?)summaryScroller.Attribute("PreviewMouseWheel"));
         Assert.Equal("0", (string?)workingSetSummary.Attribute("Grid.Column"));
         Assert.Equal("2", (string?)summaryScroller.Attribute("Grid.Column"));
         Assert.Same(workingSetSummary.Parent, summaryScroller.Parent);
@@ -1004,6 +1014,7 @@ public sealed class MainWindowLayoutContractTests
         Assert.Contains("ScrollToLeftEnd", handler);
         Assert.Contains("InitialPause", handler);
         Assert.Contains("EdgePause", handler);
+        Assert.Contains("private void StableAnchorSummaryScroller_OnPreviewMouseWheel", code);
     }
 
     [Fact]
@@ -1559,12 +1570,15 @@ public sealed class MainWindowLayoutContractTests
     }
 
     [Fact]
-    public void DeepReleaseUsesFullWidthAndLeavesRoomForTheStableSuppressionSelector()
+    public void ReleaseActionsShareTheOverviewWidthAndLeaveRoomForTheStableSuppressionSelector()
     {
         var document = LoadDocument();
         var deepRelease = document.Descendants(Presentation + "Button").Single(element =>
             (string?)element.Attribute(XName.Get("Name", "http://schemas.microsoft.com/winfx/2006/xaml")) ==
             "DeepReleaseButton");
+        var globalReclaim = document.Descendants(Presentation + "Button").Single(element =>
+            (string?)element.Attribute(XName.Get("Name", "http://schemas.microsoft.com/winfx/2006/xaml")) ==
+            "GlobalReclaimButton");
         var stableRow = document.Descendants(Presentation + "Border").Single(element =>
             (string?)element.Attribute(XName.Get("Name", "http://schemas.microsoft.com/winfx/2006/xaml")) ==
             "OverviewStableSuppressionRow");
@@ -1572,8 +1586,18 @@ public sealed class MainWindowLayoutContractTests
         Assert.Equal("Stretch", (string?)deepRelease.Attribute("HorizontalAlignment"));
         Assert.Equal("30", (string?)deepRelease.Attribute("Height"));
         Assert.Null((string?)deepRelease.Attribute("MinWidth"));
-        Assert.Equal("14,0", (string?)deepRelease.Attribute("Padding"));
-        Assert.Equal("0,12,0,0", (string?)deepRelease.Attribute("Margin"));
+        Assert.Equal("10,0", (string?)deepRelease.Attribute("Padding"));
+        Assert.Equal("Stretch", (string?)globalReclaim.Attribute("HorizontalAlignment"));
+        Assert.Equal("30", (string?)globalReclaim.Attribute("Height"));
+        var globalReclaimMenu = document.Descendants(Presentation + "Button").Single(element =>
+            (string?)element.Attribute(XName.Get("Name", "http://schemas.microsoft.com/winfx/2006/xaml")) ==
+            "GlobalReclaimScheduleMenuButton");
+        Assert.Equal("ManagedPopupTrigger_OnPreviewMouseLeftButtonDown",
+            (string?)globalReclaimMenu.Attribute("PreviewMouseLeftButtonDown"));
+        var globalReclaimPopup = document.Descendants(Presentation + "Popup").Single(element =>
+            (string?)element.Attribute(XName.Get("Name", "http://schemas.microsoft.com/winfx/2006/xaml")) ==
+            "GlobalReclaimSchedulePopup");
+        Assert.Equal("{StaticResource FadePopupStyle}", (string?)globalReclaimPopup.Attribute("Style"));
         Assert.Equal("38", (string?)stableRow.Attribute("Height"));
         var stableSelector = document.Descendants(Presentation + "ComboBox").Single(element =>
             (string?)element.Attribute(XName.Get("Name", "http://schemas.microsoft.com/winfx/2006/xaml")) ==
@@ -2531,9 +2555,9 @@ public sealed class MainWindowLayoutContractTests
             "private ProcessRow CreateProcessRow(",
             "private RunningProtectionCandidate? CreateProtectionCandidate(");
 
-        Assert.Contains("DisplayProcessableWorkingSetBytes(originalFamily)", candidate);
+        Assert.Contains("DisplayProcessableWorkingSetBytes(unprotectedFamily", candidate);
         Assert.Contains("DisplayFormat.Bytes(originalFamily.WorkingSetBytes)", candidate);
-        Assert.Contains("DisplayProcessableWorkingSetBytes(family)", running);
+        Assert.Contains("DisplayProcessableWorkingSetBytes(unprotectedFamily", running);
         Assert.Contains("DisplayFormat.Bytes(family.WorkingSetBytes)", running);
         Assert.Contains("evaluation?.ExclusionReasons", running);
     }
@@ -2656,10 +2680,11 @@ public sealed class MainWindowLayoutContractTests
 
         var settings = layout[settingsStart..];
         Assert.Contains("<StackPanel Grid.Row=\"2\" Margin=\"14,18,14,8\">", settings);
-        Assert.Equal(1, CountOccurrences(settings, "Text=\"{DynamicResource CurrentVersion}\""));
+        Assert.Contains("x:Name=\"CurrentVersionText\"", settings);
         Assert.Contains("x:Name=\"LatestVersionText\"", settings);
         Assert.Contains("Text=\"{DynamicResource Tagline}\" Style=\"{StaticResource CaptionStyle}\"", settings);
         Assert.Contains("(_availableUpdate?.Version ?? AppVersion.Current).ToString()", File.ReadAllText(CodeFixturePath()));
+        Assert.Contains("CurrentVersionText.Text = TF(\"CurrentVersion\", AppVersion.Current);", File.ReadAllText(CodeFixturePath()));
     }
 
     [Fact]
@@ -2980,7 +3005,7 @@ public sealed class MainWindowLayoutContractTests
         Assert.DoesNotContain("_settings.IntelligentCandidateSelection", optimization);
         Assert.DoesNotContain("PostTrimSamplingDelay(_settings.EnhancedSafety)", optimization);
         Assert.Contains("if (_state.IsBusy) return;", code);
-        Assert.Equal(10, CountOccurrences(code, "SetBusyState("));
+        Assert.Equal(12, CountOccurrences(code, "SetBusyState("));
     }
 
     [Fact]
@@ -3004,6 +3029,8 @@ public sealed class MainWindowLayoutContractTests
         Assert.DoesNotContain("_startHidden || !IsVisible", update);
         Assert.Contains("RefreshOverviewAttention();", update[finallyBlock..]);
         Assert.Contains("asset.ReleaseNotes", dialog);
+        Assert.Contains("if (!manual) return;", update);
+        Assert.DoesNotContain("_automaticUpdatePromptShown", update);
     }
 
     [Fact]
@@ -3452,7 +3479,7 @@ public sealed class MainWindowLayoutContractTests
     {
         var project = XDocument.Load(ProjectFixturePath());
 
-        Assert.Equal("0.1.7.5", project.Descendants("Version").Single().Value);
+        Assert.Equal("0.1.7.6", project.Descendants("Version").Single().Value);
     }
 
     [Fact]
@@ -3480,7 +3507,7 @@ public sealed class MainWindowLayoutContractTests
         Assert.Contains("naturalStableSettings is not null", refresh);
         Assert.Contains("Array.Empty<NaturalStableStateSnapshot>()", refresh);
         Assert.Contains("if (stableSettings is not null)", filters);
-        Assert.Contains("NaturalStableRecoveryEligibleComponentKeys", filters);
+        Assert.DoesNotContain("NaturalStableRecoveryEligibleComponentKeys", filters);
         Assert.Contains("NaturalStableProvisionalValidationComponentKeys", filters);
     }
 

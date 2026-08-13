@@ -1204,6 +1204,150 @@ public sealed class ApplicationReboundBackoffTrackerTests
     }
 
     [Fact]
+    public void GlobalReclaimObservationDoesNotWriteStableSamplesOrRegisterBackoff()
+    {
+        const long mib = 1024L * 1024;
+        const string componentKey = "app|component:main";
+        var scopeKey = ApplicationStableScopeIdentity.For("app", new[] { componentKey });
+        var now = DateTimeOffset.UtcNow;
+        var tracker = new ApplicationReboundBackoffTracker();
+        var stableSettings = StableStateSuppressionSettings.For(OptimizationProfile.Turbo);
+        tracker.BeginComponent(
+            "app", componentKey, null, 1000 * mib, 100 * mib,
+            ReboundBackoffSettings.Default, now,
+            learnOutcome: true, targetProcessIds: new[] { 1 }, launchSignature: "launch-1",
+            recoveryOrigin: NaturalStableObservationOrigin.GlobalReclaim);
+        NaturalStableStateSnapshot Snapshot() => new(
+            "app", scopeKey, new[] { componentKey }, "launch-1", 100 * mib,
+            IsForeground: false, IsLowActivity: true)
+        {
+            RecoveryStartedAt = now,
+            RecoveryOrigin = NaturalStableObservationOrigin.GlobalReclaim
+        };
+
+        tracker.Observe(new[] { Family("app", 100 * mib) }, now + ReboundBackoffSettings.Default.LateWindow);
+        tracker.ObserveNaturalStableStates(
+            new[] { Snapshot() }, now + ReboundBackoffSettings.Default.LateWindow, stableSettings);
+
+        Assert.Empty(tracker.FamilyStableLearningRecords);
+        Assert.Empty(tracker.NaturalStableScopeRequests(
+            now + ReboundBackoffSettings.Default.LateWindow));
+        Assert.Empty(tracker.NaturalStableObservationComponentKeys());
+        Assert.False(tracker.IsBlocked("app", now + TimeSpan.FromMinutes(6)));
+    }
+
+    [Fact]
+    public void GlobalReclaimObservationWithAnchorCanConvergeWithoutWritingStableSamplesOrStartingAReview()
+    {
+        const long mib = 1024L * 1024;
+        const string componentKey = "app|component:main";
+        var scopeKey = ApplicationStableScopeIdentity.For("app", new[] { componentKey });
+        var now = DateTimeOffset.UtcNow;
+        var anchor = new ApplicationStableLearningRecord("app", new[] { 100 * mib }, now.AddHours(-1), "launch-0")
+        {
+            ComponentKeys = new[] { componentKey },
+            ModelVersion = StableStateSuppressionPolicy.NaturalStableStateModelVersion,
+            StableSamples = new[]
+            {
+                new ApplicationStableSample(100 * mib, now.AddHours(-1), "launch-0", "history", 1, PendingHigh: false)
+            },
+            AnchorGeneration = 1,
+            AnchorGenerationBaselineBytes = 100 * mib,
+            LastStableLaunchSampleCount = 1
+        };
+        var tracker = new ApplicationReboundBackoffTracker(
+            familyStableLearningRecords: new[] { anchor });
+        var settings = StableStateSuppressionSettings.For(OptimizationProfile.Turbo);
+        tracker.BeginComponent(
+            "app", componentKey, null, 1000 * mib, 100 * mib,
+            ReboundBackoffSettings.Default, now,
+            learnOutcome: true, targetProcessIds: new[] { 1 }, launchSignature: "launch-1",
+            recoveryOrigin: NaturalStableObservationOrigin.GlobalReclaim);
+        NaturalStableStateSnapshot Snapshot() => new(
+            "app", scopeKey, new[] { componentKey }, "launch-1", 100 * mib,
+            IsForeground: false, IsLowActivity: true)
+        {
+            RecoveryStartedAt = now,
+            RecoveryOrigin = NaturalStableObservationOrigin.GlobalReclaim
+        };
+
+        var observationEndsAt = now + ReboundBackoffSettings.Default.LateWindow;
+        tracker.Observe(new[] { Family("app", 100 * mib) }, observationEndsAt);
+        Assert.Contains(tracker.NaturalStableScopeRequests(observationEndsAt), request =>
+            request.Origin == NaturalStableObservationOrigin.GlobalReclaim);
+
+        foreach (var minutes in new[] { 0d, 2d, 3d, 5d })
+            tracker.ObserveNaturalStableStates(
+                new[] { Snapshot() }, observationEndsAt + TimeSpan.FromMinutes(minutes), settings);
+
+        Assert.Equal(ApplicationStableCandidateState.Converged,
+            Assert.Single(tracker.StableCandidateStatuses).State);
+        Assert.Single(Assert.Single(tracker.FamilyStableLearningRecords).StableSamples);
+        Assert.Empty(tracker.NaturalStableReviewComponentKeys());
+        Assert.Equal(0, Assert.IsType<NaturalStableReviewSchedule>(
+            tracker.GetNaturalStableReviewSchedule(
+                "app", new[] { componentKey }, settings, "launch-1")).CompletedReviewCount);
+    }
+
+    [Fact]
+    public void GlobalReclaimExpandedScopeKeepsItsIsolationWhenTheScopeLaunchSignatureChanges()
+    {
+        const long mib = 1024L * 1024;
+        const string main = "app|component:main";
+        const string helper = "app|component:helper";
+        var now = DateTimeOffset.UtcNow;
+        var anchor = new ApplicationStableLearningRecord("app", new[] { 100 * mib }, now.AddHours(-1), "old")
+        {
+            ComponentKeys = new[] { main, helper },
+            ModelVersion = StableStateSuppressionPolicy.NaturalStableStateModelVersion,
+            StableSamples = new[]
+            {
+                new ApplicationStableSample(100 * mib, now.AddHours(-1), "old", "history", 1, PendingHigh: false)
+            },
+            AnchorGeneration = 1,
+            AnchorGenerationBaselineBytes = 100 * mib
+        };
+        var tracker = new ApplicationReboundBackoffTracker(
+            familyStableLearningRecords: new[] { anchor });
+        var settings = StableStateSuppressionSettings.For(OptimizationProfile.Turbo);
+        tracker.BeginComponent(
+            "app", main, null, 1000 * mib, 100 * mib,
+            ReboundBackoffSettings.Default, now,
+            learnOutcome: true, targetProcessIds: new[] { 1 }, launchSignature: "main-launch",
+            recoveryOrigin: NaturalStableObservationOrigin.GlobalReclaim);
+        tracker.BeginComponent(
+            "app", helper, null, 1000 * mib, 20 * mib,
+            ReboundBackoffSettings.Default, now,
+            learnOutcome: true, targetProcessIds: new[] { 1 }, launchSignature: "helper-launch",
+            recoveryOrigin: NaturalStableObservationOrigin.GlobalReclaim);
+        var snapshot = new NaturalStableStateSnapshot(
+            "app", ApplicationStableScopeIdentity.For("app", new[] { main, helper }),
+            new[] { main, helper }, "app-scope-launch", 120 * mib,
+            IsForeground: false, IsLowActivity: true)
+        {
+            RecoveryStartedAt = now,
+            RecoveryOrigin = NaturalStableObservationOrigin.GlobalReclaim,
+            FamilyScopeKey = ApplicationStableScopeIdentity.For("app", new[] { main, helper }),
+            FamilyScopeComponentKeys = new[] { main, helper },
+            FamilyScopeLaunchSignature = "app-scope-launch",
+            FamilyScopeWorkingSetBytes = 120 * mib
+        };
+
+        var observationEndsAt = now + ReboundBackoffSettings.Default.LateWindow;
+        tracker.Observe(new[] { Family("app", 120 * mib) }, observationEndsAt);
+        foreach (var minutes in new[] { 0d, 2d, 3d, 5d })
+            tracker.ObserveNaturalStableStates(new[] { snapshot }, observationEndsAt + TimeSpan.FromMinutes(minutes), settings);
+
+        Assert.Equal(ApplicationStableCandidateState.Converged,
+            Assert.Single(tracker.StableCandidateStatuses).State);
+        Assert.Single(Assert.Single(tracker.FamilyStableLearningRecords).StableSamples);
+        Assert.Empty(tracker.NaturalStableReviewComponentKeys());
+        Assert.Equal(0, Assert.IsType<NaturalStableReviewSchedule>(
+            tracker.GetNaturalStableReviewSchedule("app", new[] { main, helper }, settings, "app-scope-launch"))
+            .CompletedReviewCount);
+    }
+
+    [Fact]
     public void PostTrimRecoveryCannotConvergeBeforeThreeMinutes()
     {
         const long mib = 1024L * 1024;
@@ -1314,9 +1458,12 @@ public sealed class ApplicationReboundBackoffTrackerTests
             MaximumStableWorkingSetBytes = long.MaxValue
         };
         PrimeNaturalRecovery(tracker, now, componentKey, "launch-1", 400 * mib);
-        NaturalStableStateSnapshot Snapshot(long bytes) => new(
+        NaturalStableStateSnapshot Snapshot(long bytes, bool firstBootGate = false) => new(
             "app", scopeKey, new[] { componentKey }, "launch-1", bytes,
-            IsForeground: false, IsLowActivity: true);
+            IsForeground: false, IsLowActivity: true)
+        {
+            RequiresFirstBootAnchorGate = firstBootGate
+        };
 
         foreach (var minutes in new[] { 0d, 2d, 3d, 5d })
             tracker.ObserveNaturalStableStates(
@@ -2408,9 +2555,12 @@ public sealed class ApplicationReboundBackoffTrackerTests
             MaximumStableSamplesPerLaunch = 2
         };
         PrimeNaturalRecovery(tracker, now, componentKey, "launch-1", 200 * mib);
-        NaturalStableStateSnapshot Snapshot(long bytes) => new(
+        NaturalStableStateSnapshot Snapshot(long bytes, bool firstBootGate = false) => new(
             "app", scopeKey, new[] { componentKey }, "launch-1", bytes,
-            IsForeground: false, IsLowActivity: true);
+            IsForeground: false, IsLowActivity: true)
+        {
+            RequiresFirstBootAnchorGate = firstBootGate
+        };
 
         tracker.ObserveNaturalStableStates(new[] { Snapshot(200 * mib) }, now, settings);
         tracker.ObserveNaturalStableStates(
@@ -2541,14 +2691,50 @@ public sealed class ApplicationReboundBackoffTrackerTests
         Assert.Equal(0, nextLaunch.CompletedReviewCount);
     }
 
+    [Fact]
+    public void HistoricalReviewSessionProgressRestoresOnlyForTheSameLaunch()
+    {
+        const string componentKey = "app|component:main";
+        var scopeKey = ApplicationStableScopeIdentity.For("app", new[] { componentKey });
+        var now = DateTimeOffset.UtcNow;
+        var record = new ApplicationStableLearningRecord("app", new[] { 200L, 200L, 200L }, now, "launch-1")
+        {
+            ComponentKeys = new[] { componentKey },
+            ModelVersion = StableStateSuppressionPolicy.NaturalStableStateModelVersion,
+            StableSamples = new[]
+            {
+                new ApplicationStableSample(200, now - TimeSpan.FromMinutes(30), "launch-a", "history", 1, PendingHigh: false),
+                new ApplicationStableSample(200, now - TimeSpan.FromMinutes(15), "launch-b", "history", 1, PendingHigh: false),
+                new ApplicationStableSample(200, now, "launch-1", "history", 1, PendingHigh: false)
+            },
+            AnchorGeneration = 1,
+            AnchorGenerationBaselineBytes = 200,
+            LastStableLaunchSampleCount = 3,
+            HistoricalReviewScheduleVersion = 2
+        };
+        var tracker = new ApplicationReboundBackoffTracker(
+            familyStableLearningRecords: new[] { record });
+        tracker.RestoreHistoricalReviewSessionProgress(new[]
+        {
+            new HistoricalReviewSessionProgress(scopeKey, "launch-1", 2)
+        });
+        var settings = StableStateSuppressionSettings.For(OptimizationProfile.Turbo);
+
+        Assert.Equal(2, Assert.IsType<NaturalStableReviewSchedule>(
+            tracker.GetNaturalStableReviewSchedule("app", new[] { componentKey }, settings, "launch-1"))
+            .CompletedReviewCount);
+        Assert.Equal(0, Assert.IsType<NaturalStableReviewSchedule>(
+            tracker.GetNaturalStableReviewSchedule("app", new[] { componentKey }, settings, "launch-2"))
+            .CompletedReviewCount);
+    }
+
     [Theory]
-    [InlineData(0, 15)]
-    [InlineData(1, 15)]
-    [InlineData(2, 15)]
-    [InlineData(3, 120)]
-    public void HistoricalReviewSchedulePersistsProgressiveIntervals(
-        int completedReviews,
-        int expectedMinutes)
+    [InlineData(0)]
+    [InlineData(1)]
+    [InlineData(2)]
+    [InlineData(3)]
+    public void HistoricalReviewScheduleStartsFreshForEachApplicationLaunch(
+        int persistedCompletedReviews)
     {
         const long mib = 1024L * 1024;
         const string componentKey = "app|component:main";
@@ -2564,7 +2750,7 @@ public sealed class ApplicationReboundBackoffTrackerTests
             StableSamples = new[] { sample },
             AnchorGeneration = 1,
             AnchorGenerationBaselineBytes = sample.WorkingSetBytes,
-            HistoricalReviewSuccessCount = completedReviews,
+            HistoricalReviewSuccessCount = persistedCompletedReviews,
             HistoricalReviewScheduleVersion = 2
         };
         var tracker = new ApplicationReboundBackoffTracker(
@@ -2576,8 +2762,8 @@ public sealed class ApplicationReboundBackoffTrackerTests
                 new[] { componentKey },
                 StableStateSuppressionSettings.For(OptimizationProfile.Turbo)));
 
-        Assert.Equal(now + TimeSpan.FromMinutes(expectedMinutes), schedule.NextReviewAt);
-        Assert.Equal(completedReviews, schedule.CompletedReviewCount);
+        Assert.Equal(now + TimeSpan.FromMinutes(15), schedule.NextReviewAt);
+        Assert.Equal(0, schedule.CompletedReviewCount);
     }
 
     [Fact]
@@ -2657,9 +2843,9 @@ public sealed class ApplicationReboundBackoffTrackerTests
                 new[] { componentKey },
                 StableStateSuppressionSettings.For(OptimizationProfile.Turbo)));
 
-        Assert.Equal(3, migrated.HistoricalReviewSuccessCount);
+        Assert.Equal(0, migrated.HistoricalReviewSuccessCount);
         Assert.Equal(2, migrated.HistoricalReviewScheduleVersion);
-        Assert.Equal(now + TimeSpan.FromHours(2), schedule.NextReviewAt);
+        Assert.Equal(now + TimeSpan.FromMinutes(15), schedule.NextReviewAt);
     }
 
     [Fact]
@@ -2760,6 +2946,7 @@ public sealed class ApplicationReboundBackoffTrackerTests
         };
         var tracker = new ApplicationReboundBackoffTracker(
             Array.Empty<ApplicationBenefitLearningRecord>(), now, new[] { record });
+        tracker.EnablePersistedSessionHoldRestoration();
         var snapshot = new NaturalStableStateSnapshot(
             "app", scopeKey, new[] { componentKey }, "launch-1", 226 * mib,
             IsForeground: false, IsLowActivity: true);

@@ -9,7 +9,7 @@ public sealed class RuntimeLocalizationTests
     [InlineData(UiLanguage.English)]
     public void CurrentVersionTextMatchesApplicationVersion(UiLanguage language)
     {
-        Assert.Contains("0.1.7.4", UiTextCatalog.For(language)["CurrentVersion"]);
+        Assert.Contains("{0}", UiTextCatalog.For(language)["CurrentVersion"]);
         Assert.Contains("{0}", UiTextCatalog.For(language)["LatestVersionFormat"]);
     }
 
@@ -27,9 +27,9 @@ public sealed class RuntimeLocalizationTests
     }
 
     [Theory]
-    [InlineData(UiLanguage.ChineseSimplified, "已完成一次自然稳态确认并计入样本")]
-    [InlineData(UiLanguage.English, "completed one natural steady-state confirmation")]
-    public void SessionStableHelpDescribesACommittedSample(
+    [InlineData(UiLanguage.ChineseSimplified, "本次启动的占用已稳定")]
+    [InlineData(UiLanguage.English, "Usage is stable for this launch")]
+    public void SessionStableHelpDescribesTheCurrentHold(
         UiLanguage language,
         string expectedText)
     {
@@ -37,8 +37,8 @@ public sealed class RuntimeLocalizationTests
     }
 
     [Theory]
-    [InlineData(UiLanguage.ChineseSimplified, "当前锚点复核")]
-    [InlineData(UiLanguage.English, "current-anchor reviews")]
+    [InlineData(UiLanguage.ChineseSimplified, "本次启动复核")]
+    [InlineData(UiLanguage.English, "this-launch reviews")]
     public void StableReviewScheduleSeparatesAnchorReviewsFromHighEvidence(
         UiLanguage language,
         string expectedText)
@@ -126,6 +126,7 @@ public sealed class RuntimeLocalizationTests
         var keys = new[]
         {
             "RuntimeSampling", "PlanLowPressure", "PlanNoCandidates", "PlanCandidatesFormat",
+            "ProcessStatusGlobalReclaimObservationHelp",
             "ActivityForeground", "ActivityVisible", "ActivityMinimized", "ActivityIdle", "ActivityWorking",
             "CandidateMemory", "CandidateMemoryHelp", "CandidateMemoryFormat", "CandidateDisplayLimit",
             "CandidateDisplayLimitHelp", "CandidateDisplayLimitCurrentFormat", "CandidateDisplayUnlimited",
@@ -276,8 +277,8 @@ public sealed class RuntimeLocalizationTests
         Assert.DoesNotContain("{1}", string.Format(text["SessionUptimeHoursFormat"], 2, 5));
         Assert.DoesNotContain("{2}", string.Format(text["SessionUptimeDaysFormat"], 3, 4, 5));
         var stableProgress = string.Format(text["LearningStableSampleProgressFormat"], 2, 3, 4, 9);
-        Assert.Contains(language == UiLanguage.ChineseSimplified ? "本次 2/3" : "This launch 2/3", stableProgress);
-        Assert.Contains(language == UiLanguage.ChineseSimplified ? "总 4/9" : "total 4/9", stableProgress);
+        Assert.Contains(language == UiLanguage.ChineseSimplified ? "本次已收集 2/3" : "This launch collected 2/3", stableProgress);
+        Assert.Contains(language == UiLanguage.ChineseSimplified ? "已接受总样本 4/9" : "accepted total 4/9", stableProgress);
         var stableSamplesHelp = string.Format(
             text["LearningStableSamplesHelpFormat"],
             3, 3, text["LearningStableSamplesRolling"], 8, 9,

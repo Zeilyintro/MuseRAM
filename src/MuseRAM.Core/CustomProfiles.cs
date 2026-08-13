@@ -511,7 +511,8 @@ public enum ApplicationStableObservationDecision
     ComponentScopeChanged,
     CandidateExpired,
     ConvergedAcrossLaunch,
-    HighAnchorPending
+    HighAnchorPending,
+    FirstBootAnchorExceeded
 }
 
 public sealed record ApplicationStableObservation(
@@ -603,10 +604,15 @@ public sealed class ApplicationReboundBackoffTracker
     private readonly Dictionary<string, NaturalStableWindow> _naturalStableWindows = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, NaturalStableReviewCompletion> _naturalStableReviewCompletions =
         new(StringComparer.OrdinalIgnoreCase);
+    private readonly Dictionary<string, HistoricalReviewSession> _historicalReviewSessions =
+        new(StringComparer.OrdinalIgnoreCase);
     private readonly HashSet<string> _naturalRecoveryEligibleComponents = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, string> _naturalRecoveryCycleIds = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, string> _naturalRecoveryFamilyKeys = new(StringComparer.OrdinalIgnoreCase);
+    private readonly Dictionary<string, NaturalStableObservationOrigin> _naturalRecoveryOrigins = new(StringComparer.OrdinalIgnoreCase);
+    private readonly Dictionary<string, string> _globalReclaimSuppressedLaunchesByComponent = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, DateTimeOffset> _naturalRecoveryStartedAts = new(StringComparer.OrdinalIgnoreCase);
+    private bool _restorePersistedSessionHoldsOnNextObservation;
     private readonly Dictionary<string, double> _outcomeMultipliers = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, double> _learningConfidences = new(StringComparer.OrdinalIgnoreCase);
     private readonly List<ApplicationReboundOutcome> _completedOutcomes = new();
@@ -617,6 +623,9 @@ public sealed class ApplicationReboundBackoffTracker
     public IReadOnlyList<ApplicationBenefitLearningRecord> LearningRecords => _learning.Values.ToArray();
     public IReadOnlyList<ApplicationStableLearningRecord> FamilyStableLearningRecords => _familyStableLearning.Values.ToArray();
     public IReadOnlyList<ApplicationStableCandidateStatus> StableCandidateStatuses => _stableCandidates.Values.ToArray();
+
+    public void EnablePersistedSessionHoldRestoration() =>
+        _restorePersistedSessionHoldsOnNextObservation = true;
     public IReadOnlySet<string> NaturalStableObservationComponentKeys() =>
         _naturalStableWindows.Values
             .SelectMany(window => window.ComponentKeys)
@@ -652,8 +661,11 @@ public sealed class ApplicationReboundBackoffTracker
         }
 
         settings = settings.Normalize();
-        var completedReviews = StableAnchorLearningPolicy.AcceptedSampleCount(record) > 0
-            ? Math.Clamp(record.HistoricalReviewSuccessCount, 0, 3)
+        var completedReviews = currentLaunchSignature is not null &&
+                               _historicalReviewSessions.TryGetValue(scopeKey, out var session) &&
+                               string.Equals(session.LaunchSignature, currentLaunchSignature,
+                                   StringComparison.Ordinal)
+            ? session.CompletedReviewCount
             : 0;
         var highMigrationCycles = StableAnchorLearningPolicy.PendingHighRecoveryCycleCount(record);
         return new NaturalStableReviewSchedule(
@@ -668,6 +680,33 @@ public sealed class ApplicationReboundBackoffTracker
     private static TimeSpan NaturalStableReviewInterval(int completedReviews) => completedReviews < 3
             ? TimeSpan.FromMinutes(15)
             : TimeSpan.FromHours(2);
+
+    private void EnsureHistoricalReviewSession(NaturalStableStateSnapshot snapshot)
+    {
+        if (_historicalReviewSessions.TryGetValue(snapshot.ScopeKey, out var session) &&
+            string.Equals(session.LaunchSignature, snapshot.LaunchSignature, StringComparison.Ordinal))
+            return;
+
+        _historicalReviewSessions[snapshot.ScopeKey] = new HistoricalReviewSession(
+            snapshot.LaunchSignature,
+            CompletedReviewCount: 0);
+    }
+
+    private int HistoricalReviewCount(NaturalStableStateSnapshot snapshot) =>
+        _historicalReviewSessions.TryGetValue(snapshot.ScopeKey, out var session) &&
+        string.Equals(session.LaunchSignature, snapshot.LaunchSignature, StringComparison.Ordinal)
+            ? session.CompletedReviewCount
+            : 0;
+
+    private void IncrementHistoricalReviewCount(NaturalStableStateSnapshot snapshot)
+    {
+        EnsureHistoricalReviewSession(snapshot);
+        var session = _historicalReviewSessions[snapshot.ScopeKey];
+        _historicalReviewSessions[snapshot.ScopeKey] = session with
+        {
+            CompletedReviewCount = Math.Min(3, session.CompletedReviewCount + 1)
+        };
+    }
 
     public IReadOnlyList<NaturalStableObservationProgress> CaptureNaturalStableObservationProgress() =>
         _naturalStableWindows.Select(pair =>
@@ -705,6 +744,25 @@ public sealed class ApplicationReboundBackoffTracker
                         window.GrowthReview.LastObservedAt)
             };
         }).ToArray();
+
+    public IReadOnlyList<HistoricalReviewSessionProgress> CaptureHistoricalReviewSessionProgress() =>
+        _historicalReviewSessions.Select(pair => new HistoricalReviewSessionProgress(
+            pair.Key,
+            pair.Value.LaunchSignature,
+            pair.Value.CompletedReviewCount)).ToArray();
+
+    public void RestoreHistoricalReviewSessionProgress(
+        IEnumerable<HistoricalReviewSessionProgress>? progress)
+    {
+        foreach (var item in progress ?? Array.Empty<HistoricalReviewSessionProgress>())
+        {
+            if (string.IsNullOrWhiteSpace(item.ScopeKey) ||
+                string.IsNullOrWhiteSpace(item.LaunchSignature)) continue;
+            _historicalReviewSessions[item.ScopeKey] = new HistoricalReviewSession(
+                item.LaunchSignature,
+                Math.Clamp(item.CompletedReviewCount, 0, 3));
+        }
+    }
 
     public void RestoreNaturalStableObservationProgress(
         IEnumerable<NaturalStableObservationProgress>? progress,
@@ -803,7 +861,8 @@ public sealed class ApplicationReboundBackoffTracker
                         : StableObservationPhase.ProvisionalValidation,
                 ValidationDeadline = window.Validation?.Deadline,
                 ContinuousStableSince = window.Validation?.ContinuousStableSince,
-                ValidationUpperLimitBytes = window.Validation?.UpperLimitBytes
+                ValidationUpperLimitBytes = window.Validation?.UpperLimitBytes,
+                RequiresFirstBootAnchorGate = window.RequiresFirstBootAnchorGate
             };
         }).ToArray();
     public IReadOnlySet<string> NaturalStableRecoveryEligibleComponentKeys(
@@ -840,7 +899,9 @@ public sealed class ApplicationReboundBackoffTracker
             .Select(item => item.FamilyKey)
             .ToHashSet(StringComparer.OrdinalIgnoreCase);
         foreach (var group in _pending.Values
-                     .Where(item => item.LearnOutcome && !item.ReturnedToForegroundAt.HasValue)
+                     .Where(item => item.LearnOutcome &&
+                                    item.RecoveryOrigin != NaturalStableObservationOrigin.GlobalReclaim &&
+                                    !item.ReturnedToForegroundAt.HasValue)
                      .GroupBy(item => item.FamilyKey, StringComparer.OrdinalIgnoreCase))
         {
             var completedComponents = _naturalRecoveryEligibleComponents.Where(component =>
@@ -866,7 +927,7 @@ public sealed class ApplicationReboundBackoffTracker
                     : DateTimeOffset.MaxValue,
                 Origin = backoff
                     ? NaturalStableObservationOrigin.BackoffRecovery
-                    : NaturalStableObservationOrigin.PostTrim
+                    : group.First().RecoveryOrigin
             });
         }
 
@@ -894,7 +955,11 @@ public sealed class ApplicationReboundBackoffTracker
                                          IsNaturalRecoveryEligibilityActive(component, now, window) &&
                                          !_pending.ContainsKey(component) &&
                                          !activeBackoffs.ContainsKey(component) &&
-                                         !pendingFamilies.Contains(_naturalRecoveryFamilyKeys[component]))
+                                         !pendingFamilies.Contains(_naturalRecoveryFamilyKeys[component]) &&
+                                         (_naturalRecoveryOrigins.GetValueOrDefault(
+                                              component, NaturalStableObservationOrigin.PostTrim) !=
+                                          NaturalStableObservationOrigin.GlobalReclaim ||
+                                          HasUsableStableAnchor(component)))
                      .GroupBy(component => _naturalRecoveryFamilyKeys[component],
                          StringComparer.OrdinalIgnoreCase))
         {
@@ -904,7 +969,11 @@ public sealed class ApplicationReboundBackoffTracker
                 group.Min(component => _naturalRecoveryStartedAts[component]))
             {
                 Deadline = DateTimeOffset.MaxValue,
-                Origin = NaturalStableObservationOrigin.PostTrim
+                Origin = group.Select(component => _naturalRecoveryOrigins.GetValueOrDefault(
+                        component, NaturalStableObservationOrigin.PostTrim))
+                    .Contains(NaturalStableObservationOrigin.GlobalReclaim)
+                    ? NaturalStableObservationOrigin.GlobalReclaim
+                    : NaturalStableObservationOrigin.PostTrim
             });
         }
 
@@ -938,6 +1007,25 @@ public sealed class ApplicationReboundBackoffTracker
             .Where(pair => now - pair.Value.StartedAt < pair.Value.Settings.LateWindow)
             .Select(pair => pair.Key)
             .ToHashSet(StringComparer.OrdinalIgnoreCase);
+    public IReadOnlySet<string> PendingGlobalReclaimObservationComponentKeys(DateTimeOffset now) =>
+        _pending
+            .Where(pair => now - pair.Value.StartedAt < pair.Value.Settings.LateWindow &&
+                           pair.Value.RecoveryOrigin == NaturalStableObservationOrigin.GlobalReclaim)
+            .Select(pair => pair.Key)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+    public TimeSpan? PendingObservationRemaining(
+        IEnumerable<string> componentKeys,
+        DateTimeOffset now)
+    {
+        var remaining = componentKeys
+            .Where(_pending.ContainsKey)
+            .Select(component => _pending[component])
+            .Select(item => item.Settings.LateWindow - (now - item.StartedAt))
+            .Where(value => value > TimeSpan.Zero)
+            .DefaultIfEmpty()
+            .Max();
+        return remaining > TimeSpan.Zero ? remaining : null;
+    }
     public int LearningRevision { get; private set; }
 
     public ApplicationReboundBackoffTracker(
@@ -1025,9 +1113,7 @@ public sealed class ApplicationReboundBackoffTracker
                     record.LastStableLaunchSampleCount > 0 ? record.LastStableLaunchSampleCount : 1,
                     1,
                     MaximumStableSamplesPerLaunch),
-                HistoricalReviewSuccessCount = record.HistoricalReviewScheduleVersion > 0
-                    ? Math.Clamp(record.HistoricalReviewSuccessCount, 0, 3)
-                    : 0
+                HistoricalReviewSuccessCount = 0
             };
             var unexpiredRecord = StableAnchorLearningPolicy.ExpirePendingEvidence(normalizedRecord, loadedAt);
             var normalized = StableAnchorLearningPolicy.ReclassifyPendingHighSamples(unexpiredRecord);
@@ -1040,17 +1126,7 @@ public sealed class ApplicationReboundBackoffTracker
                     StableWorkingSetLearningPolicy.MaximumRecentSamples),
                 0,
                 MaximumStableSamplesPerLaunch);
-            var hasAcceptedAnchor = StableAnchorLearningPolicy.AcceptedSampleCount(normalized) > 0;
-            var reviewSuccessCount = !hasAcceptedAnchor
-                ? 0
-                : record.HistoricalReviewScheduleVersion switch
-            {
-                >= 2 => Math.Clamp(record.HistoricalReviewSuccessCount, 0, 3),
-                1 => Math.Min(
-                    Math.Clamp(record.HistoricalReviewSuccessCount, 0, 3),
-                    acceptedLastLaunchCount),
-                _ => acceptedLastLaunchCount
-            };
+            const int reviewSuccessCount = 0;
             if (normalized.LastStableLaunchSampleCount != acceptedLastLaunchCount ||
                 record.HistoricalReviewScheduleVersion < 2 ||
                 normalized.HistoricalReviewSuccessCount != reviewSuccessCount)
@@ -1108,7 +1184,8 @@ public sealed class ApplicationReboundBackoffTracker
         IReadOnlyCollection<int>? targetProcessIds = null,
         OptimizationRunContext? runContext = null,
         IReadOnlyCollection<int>? baselineFamilyProcessIds = null,
-        string? launchSignature = null)
+        string? launchSignature = null,
+        NaturalStableObservationOrigin recoveryOrigin = NaturalStableObservationOrigin.PostTrim)
     {
         var released = Math.Max(0, workingSetBefore - workingSetAfter);
         if (string.IsNullOrWhiteSpace(familyKey) ||
@@ -1123,6 +1200,10 @@ public sealed class ApplicationReboundBackoffTracker
             _naturalStableWindows.Remove(windowKey);
         }
         launchSignature = ResolveLaunchSignature(launchSignature, targetProcessIds, now);
+        if (recoveryOrigin == NaturalStableObservationOrigin.GlobalReclaim)
+            _globalReclaimSuppressedLaunchesByComponent[componentKey] = launchSignature;
+        else
+            _globalReclaimSuppressedLaunchesByComponent.Remove(componentKey);
         if (_pending.TryGetValue(componentKey, out var existing) &&
             now - existing.StartedAt >= existing.Settings.LateWindow)
         {
@@ -1159,7 +1240,8 @@ public sealed class ApplicationReboundBackoffTracker
             BackoffRegistered: false,
             recoveryAttempt,
             runContext,
-            launchSignature));
+            launchSignature,
+            recoveryOrigin));
     }
 
     public void Observe(
@@ -1192,12 +1274,14 @@ public sealed class ApplicationReboundBackoffTracker
                 var reboundPercent = ReboundPercent(pending, current);
                 if (IsSignificantRebound(reboundPercent, pending.Settings.EarlyReboundPercent))
                 {
-                    if (!pending.BackoffRegistered && pending.Settings.Enabled)
+                    if (!pending.BackoffRegistered && pending.Settings.Enabled &&
+                        pending.RecoveryOrigin != NaturalStableObservationOrigin.GlobalReclaim)
                         Register(targetKey, pending.FamilyKey, pending.Settings, current, now);
                     pending = pending with
                     {
                         EarlyChecked = true,
-                        BackoffRegistered = pending.Settings.Enabled
+                        BackoffRegistered = pending.Settings.Enabled &&
+                                            pending.RecoveryOrigin != NaturalStableObservationOrigin.GlobalReclaim
                     };
                     _pending[targetKey] = pending;
                 }
@@ -1214,6 +1298,7 @@ public sealed class ApplicationReboundBackoffTracker
             var backoffTriggered = pending.BackoffRegistered;
             if (!backoffTriggered &&
                 pending.Settings.Enabled &&
+                pending.RecoveryOrigin != NaturalStableObservationOrigin.GlobalReclaim &&
                 IsSignificantRebound(lateReboundPercent, pending.Settings.LateReboundPercent))
             {
                 Register(targetKey, pending.FamilyKey, pending.Settings, current, now);
@@ -1226,6 +1311,8 @@ public sealed class ApplicationReboundBackoffTracker
                 DowngradeAfterSuccessfulRetry(targetKey);
             }
             if (pending.LearnOutcome &&
+                (pending.RecoveryOrigin != NaturalStableObservationOrigin.GlobalReclaim ||
+                 HasUsableStableAnchor(pending.ComponentKey)) &&
                 !pending.ReturnedToForegroundAt.HasValue)
             {
                 _naturalRecoveryEligibleComponents.Add(pending.ComponentKey);
@@ -1237,6 +1324,7 @@ public sealed class ApplicationReboundBackoffTracker
                     _naturalRecoveryStartedAts[pending.ComponentKey] = pending.StartedAt;
                 }
                 _naturalRecoveryFamilyKeys[pending.ComponentKey] = pending.FamilyKey;
+                _naturalRecoveryOrigins[pending.ComponentKey] = pending.RecoveryOrigin;
             }
             else
             {
@@ -1271,6 +1359,8 @@ public sealed class ApplicationReboundBackoffTracker
         bool severeMemoryPressure = false,
         bool enabled = true)
     {
+        var restorePersistedSessionHolds = _restorePersistedSessionHoldsOnNextObservation;
+        _restorePersistedSessionHoldsOnNextObservation = false;
         if (_loadedStableRecordMigrationPending)
         {
             _loadedStableRecordMigrationPending = false;
@@ -1280,9 +1370,12 @@ public sealed class ApplicationReboundBackoffTracker
         {
             _naturalStableWindows.Clear();
             _naturalStableReviewCompletions.Clear();
+            _historicalReviewSessions.Clear();
             _naturalRecoveryEligibleComponents.Clear();
             _naturalRecoveryCycleIds.Clear();
             _naturalRecoveryFamilyKeys.Clear();
+            _naturalRecoveryOrigins.Clear();
+            _globalReclaimSuppressedLaunchesByComponent.Clear();
             _naturalRecoveryStartedAts.Clear();
             _stableCandidates.Clear();
             return;
@@ -1298,6 +1391,14 @@ public sealed class ApplicationReboundBackoffTracker
         var seenComponents = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         foreach (var snapshot in snapshots)
         {
+            EnsureHistoricalReviewSession(snapshot);
+            // A global-reclaim request can expand from component scope to an application scope.
+            // Keep its origin on the snapshot as the authoritative isolation marker.
+            var globalReclaimSuppressed = snapshot.RecoveryOrigin ==
+                                         NaturalStableObservationOrigin.GlobalReclaim ||
+                                         snapshot.ComponentKeys.Any(component =>
+                                             _globalReclaimSuppressedLaunchesByComponent.TryGetValue(component, out var launch) &&
+                                             string.Equals(launch, snapshot.LaunchSignature, StringComparison.Ordinal));
             seenScopes.Add(snapshot.ScopeKey);
             if (!string.IsNullOrWhiteSpace(snapshot.FamilyScopeKey))
                 seenScopes.Add(snapshot.FamilyScopeKey);
@@ -1327,7 +1428,8 @@ public sealed class ApplicationReboundBackoffTracker
                 }
                 continue;
             }
-            if (existingStatus is null &&
+            if (restorePersistedSessionHolds &&
+                existingStatus is null &&
                 existingRecord is not null &&
                 string.Equals(existingRecord.LastStableLaunchSignature,
                     snapshot.LaunchSignature, StringComparison.Ordinal) &&
@@ -1455,20 +1557,45 @@ public sealed class ApplicationReboundBackoffTracker
                 if (continuousStableSince.HasValue &&
                     now - continuousStableSince.Value >= requiredValidation)
                 {
+                    var historicalAnchor = validatingWindow.Origin ==
+                                           NaturalStableObservationOrigin.HistoricalBoundedConfirmation
+                        ? StableStateSuppressionPolicy.StableReferenceBytes(
+                            existingRecord!, maximumStableSamplePool)
+                        : null;
+                    if (validatingWindow.Origin ==
+                        NaturalStableObservationOrigin.HistoricalBoundedConfirmation &&
+                        validatingWindow.RequiresFirstBootAnchorGate && historicalAnchor.HasValue &&
+                        snapshot.WorkingSetBytes > historicalAnchor.Value)
+                    {
+                        ExpireNaturalStableWindow(
+                            snapshot,
+                            now,
+                            existingStatus,
+                            validatingWindow with { PreserveConvergedStatus = false },
+                            ApplicationStableObservationDecision.FirstBootAnchorExceeded);
+                        continue;
+                    }
                     _naturalStableWindows.Remove(snapshot.ScopeKey);
-                    var committedRecord = CommitNaturalStableSample(
-                        snapshot,
-                        validation.StableBytes,
-                        validation.StableMinimumBytes,
-                        validation.StableMaximumBytes,
-                        now,
-                        normalizedSuppressionSettings.MinimumSamples,
-                        maximumSamplesPerLaunch,
-                        maximumStableSamplePool,
-                        validation.BackoffObservation,
-                        validation.RecoveryCycleId,
-                        validatingWindow.Origin ==
-                            NaturalStableObservationOrigin.HistoricalBoundedConfirmation);
+                    var historicalReview = validatingWindow.Origin ==
+                                           NaturalStableObservationOrigin.HistoricalBoundedConfirmation;
+                    var globalReclaimObservation = validatingWindow.Origin ==
+                                                  NaturalStableObservationOrigin.GlobalReclaim;
+                    var committedRecord = globalReclaimObservation
+                        ? null
+                        : CommitNaturalStableSample(
+                            snapshot,
+                            validation.StableBytes,
+                            validation.StableMinimumBytes,
+                            validation.StableMaximumBytes,
+                            now,
+                            normalizedSuppressionSettings.MinimumSamples,
+                            maximumSamplesPerLaunch,
+                            maximumStableSamplePool,
+                            validation.BackoffObservation,
+                            validation.RecoveryCycleId,
+                            historicalReview);
+                    if (historicalReview && !globalReclaimObservation)
+                        IncrementHistoricalReviewCount(snapshot);
                     _naturalStableReviewCompletions.Remove(snapshot.ScopeKey);
                     var committedSample = committedRecord?.StableSamples
                         .OrderByDescending(sample => sample.ObservedAt)
@@ -1771,9 +1898,16 @@ public sealed class ApplicationReboundBackoffTracker
                     existingRecord?.LastStableLaunchSignature,
                     snapshot.LaunchSignature,
                     StringComparison.Ordinal);
-                var boundedConfirmation = referenceLimit.HasValue &&
+                var hasCurrentStableHold = existingStatus?.State ==
+                                           ApplicationStableCandidateState.Converged &&
+                                           string.Equals(existingStatus.LaunchSignature,
+                                               snapshot.LaunchSignature,
+                                               StringComparison.Ordinal);
+                var boundedConfirmation = !globalReclaimSuppressed && referenceLimit.HasValue &&
                                           snapshot.WorkingSetBytes <= referenceLimit.Value &&
-                                          (sameSampleLaunch || longTermReferenceLimit.HasValue);
+                                          (snapshot.RequiresFirstBootAnchorGate ||
+                                           hasCurrentStableHold &&
+                                           (sameSampleLaunch || longTermReferenceLimit.HasValue));
                 if (!postTrimRecovery &&
                     activeBackoffObservation is null &&
                     !boundedConfirmation) continue;
@@ -1790,7 +1924,7 @@ public sealed class ApplicationReboundBackoffTracker
                     }
                     else if (activeBackoffObservation is null &&
                              now - reviewCompletion.CompletedAt < NaturalStableReviewInterval(
-                                 existingRecord?.HistoricalReviewSuccessCount ?? 0))
+                                 HistoricalReviewCount(snapshot)))
                     {
                         continue;
                     }
@@ -1799,7 +1933,7 @@ public sealed class ApplicationReboundBackoffTracker
                     sameSampleLaunch &&
                     existingRecord!.StableLastObservedAt is { } lastStableObservedAt &&
                     now - lastStableObservedAt < NaturalStableReviewInterval(
-                        existingRecord.HistoricalReviewSuccessCount))
+                        HistoricalReviewCount(snapshot)))
                 {
                     continue;
                 }
@@ -2134,7 +2268,10 @@ public sealed class ApplicationReboundBackoffTracker
             snapshot.WorkingSetBytes, snapshot.WorkingSetBytes, 1,
             new[] { new TimedWorkingSetSample(now, snapshot.WorkingSetBytes, snapshot.IsLowActivity) },
             TimeSpan.Zero, TimeSpan.Zero, now,
-            allowsNewBaseline, preserveConvergedStatus, origin);
+            allowsNewBaseline, preserveConvergedStatus, origin)
+        {
+            RequiresFirstBootAnchorGate = snapshot.RequiresFirstBootAnchorGate
+        };
         AddNaturalStableObservation(snapshot, now, previous, status,
             ApplicationStableObservationDecision.FirstObservation);
     }
@@ -2299,11 +2436,7 @@ public sealed class ApplicationReboundBackoffTracker
                     maximumStableSamplePool),
                 0,
                 maximumSamplesPerLaunch),
-            HistoricalReviewSuccessCount = historicalReview && !anchorGenerationChanged
-                ? committedSampleIsAccepted
-                    ? Math.Clamp((previous?.HistoricalReviewSuccessCount ?? 0) + 1, 0, 3)
-                    : Math.Clamp(previous?.HistoricalReviewSuccessCount ?? 0, 0, 3)
-                : 0,
+            HistoricalReviewSuccessCount = 0,
             HistoricalReviewScheduleVersion = 2
         };
         _familyStableLearning[snapshot.ScopeKey] = updated;
@@ -2389,8 +2522,15 @@ public sealed class ApplicationReboundBackoffTracker
         _naturalRecoveryEligibleComponents.Remove(componentKey);
         _naturalRecoveryCycleIds.Remove(componentKey);
         _naturalRecoveryFamilyKeys.Remove(componentKey);
+        _naturalRecoveryOrigins.Remove(componentKey);
+        _globalReclaimSuppressedLaunchesByComponent.Remove(componentKey);
         _naturalRecoveryStartedAts.Remove(componentKey);
     }
+
+    private bool HasUsableStableAnchor(string componentKey) =>
+        _familyStableLearning.Values.Any(record =>
+            record.ComponentKeys.Contains(componentKey, StringComparer.OrdinalIgnoreCase) &&
+            StableAnchorLearningPolicy.AcceptedSampleCount(record) > 0);
 
     private bool IsNaturalRecoveryEligibilityActive(
         string componentKey,
@@ -3206,6 +3346,7 @@ public sealed class ApplicationReboundBackoffTracker
     {
         public NaturalStableValidation? Validation { get; init; }
         public NaturalStableGrowthReview? GrowthReview { get; init; }
+        public bool RequiresFirstBootAnchorGate { get; init; }
     }
 
     private sealed record TimedWorkingSetSample(
@@ -3218,6 +3359,10 @@ public sealed class ApplicationReboundBackoffTracker
     private sealed record NaturalStableReviewCompletion(
         string LaunchSignature,
         DateTimeOffset CompletedAt);
+
+    private sealed record HistoricalReviewSession(
+        string LaunchSignature,
+        int CompletedReviewCount);
 
     private sealed record NaturalStableGrowthReview(
         string FamilyScopeKey,
@@ -3256,7 +3401,7 @@ public sealed class ApplicationReboundBackoffTracker
     private static string LearningKey(ApplicationBenefitLearningRecord record) =>
         string.IsNullOrWhiteSpace(record.ComponentKey) ? record.FamilyKey : record.ComponentKey;
 
-    private static string? ResolveLaunchSignature(
+    private static string ResolveLaunchSignature(
         string? launchSignature,
         IReadOnlyCollection<int>? targetProcessIds,
         DateTimeOffset now)
@@ -3365,7 +3510,8 @@ public sealed class ApplicationReboundBackoffTracker
         bool BackoffRegistered,
         bool RecoveryAttempt,
         OptimizationRunContext? RunContext,
-        string? LaunchSignature);
+        string? LaunchSignature,
+        NaturalStableObservationOrigin RecoveryOrigin);
 
     private sealed record BackoffState(
         string FamilyKey,

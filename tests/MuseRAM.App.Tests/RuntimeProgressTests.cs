@@ -8,9 +8,9 @@ namespace MuseRAM.App.Tests;
 public sealed class RuntimeProgressTests
 {
     [Fact]
-    public void RuntimeProgressSchemaIsVersionFour()
+    public void RuntimeProgressSchemaIsVersionFive()
     {
-        Assert.Equal(4, RuntimeProgressStore.CurrentSchemaVersion);
+        Assert.Equal(5, RuntimeProgressStore.CurrentSchemaVersion);
     }
 
     [Fact]
@@ -28,6 +28,8 @@ public sealed class RuntimeProgressTests
             Assert.Null(result.ErrorMessage);
             var progress = Assert.IsType<RuntimeProgressDocument>(result.Progress);
             Assert.Equal(120, progress.ScheduledOptimizationElapsedSeconds);
+            Assert.Equal(512, progress.RecentTrimBytes);
+            Assert.Equal(-128, progress.RecentNetGainBytes);
             Assert.Equal(savedAt + TimeSpan.FromMinutes(8),
                 RuntimeProgressPolicy.RestoreAnchor(progress.ScheduledOptimizationElapsedSeconds, savedAt + TimeSpan.FromMinutes(10)));
             Assert.Equal(90, Assert.Single(progress.Activities).IdleSeconds);
@@ -35,6 +37,9 @@ public sealed class RuntimeProgressTests
             Assert.Equal(45, Assert.Single(progress.Backoffs).RemainingBlockSeconds);
             Assert.Equal(3600, progress.SessionUptimeSeconds);
             Assert.Single(progress.NaturalStableObservations!);
+            var reviewSession = Assert.Single(progress.HistoricalReviewSessions!);
+            Assert.Equal("launch-1", reviewSession.LaunchSignature);
+            Assert.Equal(2, reviewSession.CompletedReviewCount);
             Assert.Equal(TimeSpan.FromHours(1), RuntimeProgressPolicy.RestoreDuration(progress.SessionUptimeSeconds));
             var ruleTarget = Assert.Single(progress.ApplicationRuleTargets!);
             Assert.Equal("rule-1", ruleTarget.RuleId);
@@ -147,6 +152,31 @@ public sealed class RuntimeProgressTests
     }
 
     [Fact]
+    public void VersionFourSnapshotWithoutRecentMetricsLoadsWithNoRecentValues()
+    {
+        var path = TestPath();
+        var savedAt = DateTimeOffset.UtcNow;
+        try
+        {
+            var legacy = JsonSerializer.SerializeToNode(Document(savedAt) with { SchemaVersion = 4 })!.AsObject();
+            legacy.Remove(nameof(RuntimeProgressDocument.RecentTrimBytes));
+            legacy.Remove(nameof(RuntimeProgressDocument.RecentNetGainBytes));
+            File.WriteAllText(path, legacy.ToJsonString());
+
+            var progress = Assert.IsType<RuntimeProgressDocument>(
+                new RuntimeProgressStore(path).LoadWithStatus(savedAt).Progress);
+
+            Assert.Equal(RuntimeProgressStore.CurrentSchemaVersion, progress.SchemaVersion);
+            Assert.Null(progress.RecentTrimBytes);
+            Assert.Null(progress.RecentNetGainBytes);
+        }
+        finally
+        {
+            DeleteFiles(path);
+        }
+    }
+
+    [Fact]
     public void MalformedSnapshotIsReportedWithoutOverwritingIt()
     {
         var path = TestPath();
@@ -188,6 +218,8 @@ public sealed class RuntimeProgressTests
         AutomaticSafetyElapsedSeconds: 15,
         CumulativeTrimBytes: 1024,
         CumulativeNetGainBytes: -256,
+        RecentTrimBytes: 512,
+        RecentNetGainBytes: -128,
         Activities: new[] { new RuntimeActivityProgress("edge", 42, 1001, 120, 90, 8) },
         TrimHistory: new[] { new RuntimeTrimProgress(42, 1001, 30) },
         Backoffs: new[] { new ApplicationBackoffProgress("edge", 1, 45, null, false, false) },
@@ -208,6 +240,10 @@ public sealed class RuntimeProgressTests
                 new[] { new NaturalStableTimedSampleProgress(savedAt, 202, true) },
                 TimeSpan.FromMinutes(3), TimeSpan.FromMinutes(3), savedAt,
                 true, false, NaturalStableObservationOrigin.PostTrim)
+        },
+        HistoricalReviewSessions: new[]
+        {
+            new HistoricalReviewSessionProgress("edge|scope:main", "launch-1", 2)
         });
 
     private static string TestPath() =>

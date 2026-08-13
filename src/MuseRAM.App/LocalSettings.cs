@@ -16,7 +16,7 @@ public enum CloseButtonBehavior
 
 public static class SettingsSchema
 {
-    public const int CurrentVersion = 6;
+    public const int CurrentVersion = 7;
 }
 
 public static class CandidateDisplayLimitPolicy
@@ -44,6 +44,10 @@ public sealed class LocalSettings
     public bool AutoOptimization { get; set; }
     public bool ScheduledOptimizationEnabled { get; set; }
     public int ScheduledOptimizationIntervalMinutes { get; set; } = ScheduledOptimizationPolicy.DefaultIntervalMinutes;
+    public bool GlobalReclaimIntervalEnabled { get; set; }
+    public int GlobalReclaimIntervalMinutes { get; set; } = GlobalReclaimSchedulePolicy.DefaultIntervalMinutes;
+    public bool GlobalReclaimStartupDelayEnabled { get; set; }
+    public int GlobalReclaimStartupDelayMinutes { get; set; } = GlobalReclaimSchedulePolicy.DefaultStartupDelayMinutes;
     public bool LongIdleOptimizationEnabled { get; set; }
     public int LongIdleOptimizationMinutes { get; set; } = LongIdleOptimizationPolicy.DefaultMinutes;
     public bool StartWithWindows { get; set; }
@@ -81,6 +85,9 @@ public sealed class LocalSettings
     public List<ApplicationProtectionRule>? ApplicationProtectionRules { get; set; }
     public List<string> ProtectedPaths { get; set; } = new();
     public List<ApplicationOptimizationRule>? ApplicationOptimizationRules { get; set; }
+    // Identifies this Windows boot and prevents a MuseRAM restart from treating the same app instance as new.
+    public long FirstBootStableReviewBootUtcTicks { get; set; }
+    public List<string> FirstBootStableReviewLaunches { get; set; } = new();
 
     public CustomOptimizationProfile? ActiveCustomProfile => CustomProfiles.FirstOrDefault(profile =>
         string.Equals(profile.Id, ActiveCustomProfileId, StringComparison.OrdinalIgnoreCase));
@@ -146,6 +153,10 @@ public sealed class LocalSettings
         AutoOptimization = AutoOptimization,
         ScheduledOptimizationEnabled = ScheduledOptimizationEnabled,
         ScheduledOptimizationIntervalMinutes = ScheduledOptimizationIntervalMinutes,
+        GlobalReclaimIntervalEnabled = GlobalReclaimIntervalEnabled,
+        GlobalReclaimIntervalMinutes = GlobalReclaimIntervalMinutes,
+        GlobalReclaimStartupDelayEnabled = GlobalReclaimStartupDelayEnabled,
+        GlobalReclaimStartupDelayMinutes = GlobalReclaimStartupDelayMinutes,
         LongIdleOptimizationEnabled = LongIdleOptimizationEnabled,
         LongIdleOptimizationMinutes = LongIdleOptimizationMinutes,
         StartWithWindows = StartWithWindows,
@@ -180,7 +191,9 @@ public sealed class LocalSettings
         SuppressedUpdateVersion = SuppressedUpdateVersion,
         ApplicationProtectionRules = ApplicationProtectionRules?.Select(CloneProtectionRule).ToList(),
         ProtectedPaths = ProtectedPaths.ToList(),
-        ApplicationOptimizationRules = ApplicationOptimizationRules?.Select(CloneOptimizationRule).ToList()
+        ApplicationOptimizationRules = ApplicationOptimizationRules?.Select(CloneOptimizationRule).ToList(),
+        FirstBootStableReviewBootUtcTicks = FirstBootStableReviewBootUtcTicks,
+        FirstBootStableReviewLaunches = FirstBootStableReviewLaunches.ToList()
     };
 
     private static ApplicationProtectionRule CloneProtectionRule(ApplicationProtectionRule rule) => new()
@@ -666,6 +679,26 @@ public static class ScheduledOptimizationPolicy
         autoOptimizationEnabled && ignoresMemoryPressure;
 }
 
+public static class GlobalReclaimSchedulePolicy
+{
+    public const int DefaultIntervalMinutes = 60;
+    public const int DefaultStartupDelayMinutes = 5;
+    public const int MinimumIntervalMinutes = 1;
+    public const int MaximumIntervalMinutes = 1440;
+    public const int MinimumStartupDelayMinutes = 0;
+    public const int MaximumStartupDelayMinutes = 1440;
+
+    public static int NormalizeInterval(int minutes) =>
+        minutes is >= MinimumIntervalMinutes and <= MaximumIntervalMinutes
+            ? minutes
+            : DefaultIntervalMinutes;
+
+    public static int NormalizeStartupDelay(int minutes) =>
+        minutes is >= MinimumStartupDelayMinutes and <= MaximumStartupDelayMinutes
+            ? minutes
+            : DefaultStartupDelayMinutes;
+}
+
 public static class LongIdleOptimizationPolicy
 {
     public const int DefaultMinutes = 60;
@@ -838,6 +871,10 @@ public sealed class LocalSettingsStore
                     MigrateStableValidationSettings(root);
                     root["SettingsVersion"] = 6;
                     break;
+                case 6:
+                    root[nameof(LocalSettings.FirstBootStableReviewLaunches)] ??= new JsonArray();
+                    root["SettingsVersion"] = 7;
+                    break;
                 default:
                     throw new InvalidDataException($"No settings migration is available from version {version}.");
             }
@@ -996,6 +1033,10 @@ public sealed class LocalSettingsStore
         }
         settings.ScheduledOptimizationIntervalMinutes = ScheduledOptimizationPolicy.NormalizeInterval(
             settings.ScheduledOptimizationIntervalMinutes);
+        settings.GlobalReclaimIntervalMinutes = GlobalReclaimSchedulePolicy.NormalizeInterval(
+            settings.GlobalReclaimIntervalMinutes);
+        settings.GlobalReclaimStartupDelayMinutes = GlobalReclaimSchedulePolicy.NormalizeStartupDelay(
+            settings.GlobalReclaimStartupDelayMinutes);
         settings.LongIdleOptimizationMinutes = LongIdleOptimizationPolicy.NormalizeMinutes(
             settings.LongIdleOptimizationMinutes);
         settings.CandidateDisplayLimit = CandidateDisplayLimitPolicy.Normalize(settings.CandidateDisplayLimit);
@@ -1005,6 +1046,13 @@ public sealed class LocalSettingsStore
         if (string.IsNullOrWhiteSpace(settings.UpdateFeedUrl))
             settings.UpdateFeedUrl = UpdateConfiguration.FeedUrl;
         settings.SuppressedUpdateVersion = settings.SuppressedUpdateVersion?.Trim() ?? string.Empty;
+        settings.FirstBootStableReviewBootUtcTicks = Math.Max(0, settings.FirstBootStableReviewBootUtcTicks);
+        settings.FirstBootStableReviewLaunches = (settings.FirstBootStableReviewLaunches ?? new List<string>())
+            .Where(value => !string.IsNullOrWhiteSpace(value))
+            .Select(value => value.Trim())
+            .Distinct(StringComparer.Ordinal)
+            .Take(512)
+            .ToList();
         settings.CustomProfiles = NormalizeCustomProfiles(settings.CustomProfiles);
         if (settings.CustomProfiles.Count == 0)
         {

@@ -4,7 +4,7 @@
 
 MuseRAM is a memory management tool for Windows. It quietly observes system activity, helps identify background applications suitable for optimization, and reduces memory usage while minimizing disruption to your work.
 
-> Current version: `0.1.7.4` · Beta
+> Current version: `0.1.7.6` · Beta
 
 ![MuseRAM overview and candidate list](./docs/images/overview-dark.png)
 
@@ -12,6 +12,7 @@ MuseRAM is a memory management tool for Windows. It quietly observes system acti
 
 - **Clear memory overview**: View memory usage, recent changes, optimization results, and MuseRAM's own resource usage in one place.
 - **Manual or automatic optimization**: Optimize immediately or let MuseRAM act automatically according to the current system state.
+- **Global reclaim**: Quickly reclaim memory used by unprotected background processes when you need to free more memory in a short time.
 - **Transparent candidate decisions**: See which applications are eligible for optimization and why others are temporarily deferred.
 - **Application protection**: Protect an entire application or only selected executables within it.
 - **Benefit learning**: Learn from previous optimization results to make future decisions better suited to real usage.
@@ -62,6 +63,8 @@ Requirements:
 Regular memory optimization does not close applications. However, an application may reload content or respond briefly when that content is used again. Protect applications that are editing documents, creating content, or running important tasks.
 
 Deep Release is different from regular optimization. It is intended for background applications you have confirmed are no longer needed. Check for unsaved work before using it.
+
+Global reclaim bypasses some normal limits to free more background memory quickly without closing applications. It may cause more noticeable memory rebound or reloading later, so protect important applications first.
 
 ## Local Data and Privacy
 

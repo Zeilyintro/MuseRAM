@@ -37,6 +37,7 @@ public partial class MainWindow : Window
     private readonly OptimizationPlanner _planner = new();
     private readonly OptimizationReboundTracker _reboundTracker = new();
     private readonly ApplicationReboundDetailTracker _applicationReboundDetailTracker = new();
+    private readonly ApplicationReboundDetailTracker _globalReclaimDetailTracker = new();
     private readonly ApplicationReboundBackoffTracker _applicationBackoffTracker;
     private readonly ApplicationOptimizationRuleRuntime _applicationRuleRuntime = new();
     private readonly Dictionary<ApplicationRuleOutcomeAttributionKey, HashSet<ApplicationRuleTargetReference>>
@@ -88,7 +89,6 @@ public partial class MainWindow : Window
         Array.Empty<ProtectionSuggestion>();
     private UpdateAsset? _availableUpdate;
     private bool _updateCheckInProgress;
-    private bool _automaticUpdatePromptShown;
     private bool _protectionSuggestionShimmerActive;
     private IReadOnlyDictionary<string, BackgroundActivity> _activity =
         new Dictionary<string, BackgroundActivity>();
@@ -110,6 +110,8 @@ public partial class MainWindow : Window
     private TimeSpan _lastProcessCaptureDuration;
     private ProcessCaptureDiagnostics _lastProcessCaptureDiagnostics;
     private DateTimeOffset _scheduledOptimizationAnchor = DateTimeOffset.UtcNow;
+    private DateTimeOffset _globalReclaimIntervalAnchor = DateTimeOffset.UtcNow;
+    private bool _globalReclaimStartupDelayCompleted;
     private DateTimeOffset _lastSuccessfulOptimizationAt = DateTimeOffset.UtcNow;
     private bool _syncingControls;
     private readonly HashSet<Popup> _openApplicationRulePopups = new();
@@ -129,6 +131,8 @@ public partial class MainWindow : Window
     private ulong? _previousAvailablePhysicalBytes;
     private long _cumulativeTrimBytes;
     private long _cumulativeNetGainBytes;
+    private long? _recentTrimBytes;
+    private long? _recentNetGainBytes;
     private DateTimeOffset? _lastMemoryMetricsAt;
     private string? _editingCustomProfileId;
     private string? _editingCustomStableSuppressionProfileId;
@@ -163,7 +167,11 @@ public partial class MainWindow : Window
     private OptimizationRunKind _pendingReboundRunKind;
     private int _nextReboundRunSequence;
     private int? _activeReboundRunSequence;
+    private int? _activeGlobalReclaimRunSequence;
     private DateTimeOffset? _lastReboundHistorySaveAt;
+    private readonly HashSet<string> _firstBootAnchorExceededScopeKeys = new(StringComparer.OrdinalIgnoreCase);
+    private readonly Dictionary<string, string> _firstBootAnchorPendingLaunchesByScope =
+        new(StringComparer.OrdinalIgnoreCase);
 
     public MainWindow()
     {
@@ -299,6 +307,7 @@ public partial class MainWindow : Window
             AutoToggle.IsChecked = _settings.AutoOptimization;
             CompactAutoToggle.IsChecked = _settings.AutoOptimization;
             SynchronizeScheduledOptimizationControls();
+            SynchronizeGlobalReclaimScheduleControls();
             SynchronizeLongIdleOptimizationControls();
             SynchronizeCandidateModeControls();
             SynchronizeCandidateDisplayLimitControls();
@@ -411,7 +420,9 @@ public partial class MainWindow : Window
             }
             var reboundObservedAt = DateTimeOffset.Now;
             _applicationReboundDetailTracker.Observe(_families, reboundObservedAt);
+            _globalReclaimDetailTracker.Observe(_families, reboundObservedAt);
             SynchronizeReboundRunHistory(reboundObservedAt);
+            SynchronizeGlobalReclaimRunHistory(reboundObservedAt);
             SaveReboundHistoryIfDue(reboundObservedAt);
             UpdateApplicationReboundSummary();
             var activityProtection = CurrentProtectionRules();
@@ -461,14 +472,15 @@ public partial class MainWindow : Window
                     _settings.ActiveCustomProfile?.BaseProfile ?? _settings.Profile);
             _applicationBackoffTracker.ObserveNaturalStableStates(
                 stableObservationEnabled
-                    ? StableStateSuppressionPolicy.NaturalStableStateSnapshots(
+                    ? ApplyFirstBootStableReviewGate(
+                        StableStateSuppressionPolicy.NaturalStableStateSnapshots(
                         _families,
                         candidateIdleSettings,
                         CurrentProtectionRules(),
                         _candidateIdleReadiness,
                         _applicationBackoffTracker.FamilyStableLearningRecords,
                         _applicationBackoffTracker.NaturalStableScopeRequests(
-                            activityObservedAt))
+                            activityObservedAt)))
                     : Array.Empty<NaturalStableStateSnapshot>(),
                 DateTimeOffset.Now,
                 naturalStableSettings,
@@ -476,6 +488,13 @@ public partial class MainWindow : Window
                 stableObservationEnabled);
             foreach (var observation in _applicationBackoffTracker.DrainCompletedStableObservations())
             {
+                if (observation.Decision == ApplicationStableObservationDecision.FirstBootAnchorExceeded)
+                    _firstBootAnchorExceededScopeKeys.Add(observation.ScopeKey);
+                if (observation.Decision is ApplicationStableObservationDecision.FirstBootAnchorExceeded or
+                    ApplicationStableObservationDecision.Converged)
+                {
+                    CompleteFirstBootAnchorReview(observation.ScopeKey);
+                }
                 var completedObservation = observation;
                 QueueCalibrationWrite(() =>
                     _calibrationMetricsStore.AppendStableStateObservation(completedObservation));
@@ -517,6 +536,12 @@ public partial class MainWindow : Window
                         manual: true,
                         scheduled: true,
                         snapshotAlreadyRefreshed: true);
+                }
+                else if (IsGlobalReclaimDue(DateTimeOffset.UtcNow))
+                {
+                    _globalReclaimIntervalAnchor = DateTimeOffset.UtcNow;
+                    _globalReclaimStartupDelayCompleted = true;
+                    await RunGlobalReclaimAsync(automatic: true);
                 }
                 else if (applicationRule is null && _settings.AutoOptimization && CanRunUnattendedOptimization())
                 {
@@ -795,6 +820,8 @@ public partial class MainWindow : Window
                     originalFamily, stableComponentKeys));
         var pendingBenefitObservation = componentKeys.Any(
             _applicationBackoffTracker.PendingObservationComponentKeys(now).Contains);
+        var pendingGlobalReclaimObservation = componentKeys.Any(
+            _applicationBackoffTracker.PendingGlobalReclaimObservationComponentKeys(now).Contains);
         var indicator = ProcessRetentionPresentation.Resolve(
             isProtected: unprotectedOriginal is null,
             isPartiallyProtected: unprotectedOriginal is not null &&
@@ -813,7 +840,8 @@ public partial class MainWindow : Window
                 _applicationBackoffTracker.NaturalStableProvisionalValidationComponentKeys().Contains),
             reboundObservationPending: pendingBenefitObservation);
         var (status, detail) = FormatRetentionIndicator(
-            indicator, family, stableComponentKeys, statuses, now, reviewSchedule);
+            indicator, family, stableComponentKeys, statuses, now, reviewSchedule,
+            pendingGlobalReclaimObservation);
         return (status, detail, RetentionIconFor(indicator));
     }
 
@@ -855,12 +883,17 @@ public partial class MainWindow : Window
             candidate.Family.DisplayName,
             candidate.Family.ExecutableDirectory,
             candidate.TargetProcesses);
-        var displayWorkingSetBytes = DisplayProcessableWorkingSetBytes(originalFamily);
+        var unprotectedFamily = protection.FilterUnprotectedProcesses(originalFamily, protectionContext);
+        var displayWorkingSetBytes = DisplayProcessableWorkingSetBytes(unprotectedFamily ?? new ProcessFamilySnapshot(
+            originalFamily.Key,
+            originalFamily.DisplayName,
+            originalFamily.ExecutableDirectory,
+            Array.Empty<ProcessSnapshot>()));
         var autoOptimizationStatus = FormatBackoffStatus(candidate.Family, now);
         var row = CreateProcessRow(originalFamily, protection, protectionContext,
             decisionFamily: targetFamily, now: now) with
         {
-            HasPartialProtectionBadge = protection.FilterUnprotectedProcesses(originalFamily, protectionContext) is { } unprotected &&
+            HasPartialProtectionBadge = unprotectedFamily is { } unprotected &&
                 unprotected.Processes.Count < originalFamily.Processes.Count,
             AutoOptimizationStatus = autoOptimizationStatus,
             Memory = TF(
@@ -931,7 +964,8 @@ public partial class MainWindow : Window
         IEnumerable<string> componentKeys,
         IReadOnlyList<NaturalStableObservationStatus> observationStatuses,
         DateTimeOffset now,
-        NaturalStableReviewSchedule? reviewSchedule = null)
+        NaturalStableReviewSchedule? reviewSchedule = null,
+        bool globalReclaimBenefitObservation = false)
     {
         var componentKeySet = componentKeys.ToHashSet(StringComparer.OrdinalIgnoreCase);
         var observation = observationStatuses.FirstOrDefault(status =>
@@ -990,6 +1024,8 @@ public partial class MainWindow : Window
             ProcessRetentionIndicator.NaturalStableReview =>
                 (T("ProcessStatusStableReview"), observation is null
                     ? T("ProcessStatusStableReviewHelp")
+                    : observation.RequiresFirstBootAnchorGate
+                        ? T("ProcessStatusFirstBootAnchorReviewHelp")
                     : TF("StableStateRetainedDuringReviewFormat",
                         observation is { Phase: StableObservationPhase.ProvisionalValidation,
                             ValidationDeadline: not null }
@@ -1005,10 +1041,15 @@ public partial class MainWindow : Window
                             ? Remaining(validationDeadline)
                             : Remaining(observation.Deadline))),
             ProcessRetentionIndicator.BenefitObservation =>
-                (T("ProcessStatusBenefitObservation"), T("ProcessStatusBenefitObservationHelp")),
+                (T("ProcessStatusBenefitObservation"), globalReclaimBenefitObservation
+                    ? TF("ProcessStatusGlobalReclaimObservationHelp",
+                        FormatPendingBenefitObservationRemaining(componentKeySet, now))
+                    : TF("ProcessStatusBenefitObservationHelp",
+                        FormatPendingBenefitObservationRemaining(componentKeySet, now))),
             ProcessRetentionIndicator.BenefitObservationWithHistoricalStable =>
                 (T("ProcessStatusBenefitObservation"),
-                    T("ProcessStatusBenefitObservationWithHistoricalStableHelp")),
+                    TF("ProcessStatusBenefitObservationWithHistoricalStableHelp",
+                        FormatPendingBenefitObservationRemaining(componentKeySet, now))),
             ProcessRetentionIndicator.AutomaticBackoff =>
                 (T("ProcessStatusBackoff"), T("AutoOptimizationStatusHelp")),
             ProcessRetentionIndicator.Foreground =>
@@ -1034,6 +1075,13 @@ public partial class MainWindow : Window
             _ => ("--", null)
         };
     }
+
+    private string FormatPendingBenefitObservationRemaining(
+        IEnumerable<string> componentKeys,
+        DateTimeOffset now) =>
+        _applicationBackoffTracker.PendingObservationRemaining(componentKeys, now) is { } remaining
+            ? FormatRemaining(remaining)
+            : "--";
 
     private string FormatStableValidationObservation(
         NaturalStableObservationStatus observation,
@@ -1117,6 +1165,62 @@ public partial class MainWindow : Window
             return bytes > long.MaxValue - total ? long.MaxValue : total + bytes;
         });
 
+    private IReadOnlyList<NaturalStableStateSnapshot> ApplyFirstBootStableReviewGate(
+        IReadOnlyList<NaturalStableStateSnapshot> snapshots)
+    {
+        var bootStartedAt = DateTimeOffset.UtcNow - TimeSpan.FromMilliseconds(Environment.TickCount64);
+        // TickCount and UtcNow are sampled separately.  Persist a minute bucket so a
+        // MuseRAM restart during the same Windows boot cannot look like a new boot.
+        var bootTicks = bootStartedAt.UtcTicks -
+                        bootStartedAt.UtcTicks % TimeSpan.TicksPerMinute;
+        if (_settings.FirstBootStableReviewBootUtcTicks != bootTicks)
+        {
+            if (!TryUpdateSettings(settings =>
+                {
+                    settings.FirstBootStableReviewBootUtcTicks = bootTicks;
+                    settings.FirstBootStableReviewLaunches.Clear();
+                }))
+            {
+                return snapshots;
+            }
+            _firstBootAnchorExceededScopeKeys.Clear();
+        }
+
+        var seen = _settings.FirstBootStableReviewLaunches.ToHashSet(StringComparer.Ordinal);
+        var changed = false;
+        var result = new List<NaturalStableStateSnapshot>(snapshots.Count);
+        foreach (var snapshot in snapshots)
+        {
+            var identity = $"{snapshot.ScopeKey}|{snapshot.LaunchSignature}";
+            var isFirstInstanceThisBoot = !seen.Contains(identity);
+            if (isFirstInstanceThisBoot)
+            {
+                seen.Add(identity);
+                changed = true;
+                _firstBootAnchorExceededScopeKeys.Remove(snapshot.ScopeKey);
+                _firstBootAnchorPendingLaunchesByScope[snapshot.ScopeKey] = snapshot.LaunchSignature;
+            }
+            var requiresAnchorGate = _firstBootAnchorPendingLaunchesByScope.TryGetValue(
+                snapshot.ScopeKey, out var pendingLaunchSignature) &&
+                string.Equals(pendingLaunchSignature, snapshot.LaunchSignature, StringComparison.Ordinal);
+            result.Add(snapshot with { RequiresFirstBootAnchorGate = requiresAnchorGate });
+        }
+        if (changed)
+        {
+            _ = TryUpdateSettings(settings =>
+            {
+                settings.FirstBootStableReviewLaunches = seen.Take(512).ToList();
+            });
+        }
+        return result;
+    }
+
+    private void CompleteFirstBootAnchorReview(string scopeKey)
+    {
+        if (string.IsNullOrWhiteSpace(scopeKey)) return;
+        _firstBootAnchorPendingLaunchesByScope.Remove(scopeKey);
+    }
+
     private ProcessRow CreateProcessRow(
         ProcessFamilySnapshot family,
         ProtectionRules protection,
@@ -1175,6 +1279,8 @@ public partial class MainWindow : Window
             : componentKeys;
         var pendingBenefitObservation = componentKeys.Any(
             _applicationBackoffTracker.PendingObservationComponentKeys(observedAt).Contains);
+        var pendingGlobalReclaimObservation = componentKeys.Any(
+            _applicationBackoffTracker.PendingGlobalReclaimObservationComponentKeys(observedAt).Contains);
         var naturalStableObservation = !pendingBenefitObservation && stableComponentKeys.Any(
             _applicationBackoffTracker.NaturalStableObservationComponentKeys().Contains);
         var naturalStableReview = !pendingBenefitObservation && stableComponentKeys.Any(
@@ -1203,12 +1309,37 @@ public partial class MainWindow : Window
                 stableSettings,
                 StableStateSuppressionPolicy.CurrentNaturalStableLaunchSignature(
                     activityFamily, stableComponentKeys));
+        var currentScopeKey = ApplicationStableScopeIdentity.For(family.Key, stableComponentKeys);
+        var firstBootAnchorExceeded = _firstBootAnchorExceededScopeKeys.Contains(currentScopeKey);
+        if (firstBootAnchorExceeded)
+        {
+            // A first-launch review that exceeded the historical anchor must return
+            // to ordinary candidate evaluation instead of retaining the old hold.
+            hasLongTermStableReference = false;
+            retentionIndicator = ProcessRetentionPresentation.Resolve(
+                isProtected,
+                isPartiallyProtected,
+                evaluation?.ExclusionReasons,
+                naturalStableObservation,
+                hasLongTermStableReference,
+                evaluation?.IsEligible == true,
+                evaluation?.TargetProcessCount > 0,
+                naturalStableReview,
+                naturalStableGrowthReview,
+                naturalStableProvisionalValidation,
+                reboundObservationPending: pendingBenefitObservation);
+        }
         var (protectedText, protectionDetail) = FormatRetentionIndicator(
             retentionIndicator, activityFamily, stableComponentKeys, observationStatuses, observedAt,
-            reviewSchedule);
+            reviewSchedule, pendingGlobalReclaimObservation);
+        if (firstBootAnchorExceeded)
+        {
+            protectionDetail = T("ProcessStatusFirstBootAnchorExceededHelp");
+        }
         var retentionIcon = RetentionIconFor(retentionIndicator);
         var mainProcess = activityFamily.Processes.OrderByDescending(process => process.WorkingSetBytes).First();
-        var targetWorkingSetBytes = DisplayProcessableWorkingSetBytes(family);
+        var targetWorkingSetBytes = DisplayProcessableWorkingSetBytes(unprotectedFamily ?? new ProcessFamilySnapshot(
+            family.Key, family.DisplayName, family.ExecutableDirectory, Array.Empty<ProcessSnapshot>()));
         var targetProcessCount = evaluation?.TargetProcessCount ?? activityFamily.Processes.Count;
         var idleScore = isProtected || targetProcessCount == 0
             ? T("IdleScoreUnavailable")
@@ -1253,7 +1384,10 @@ public partial class MainWindow : Window
             string.Empty,
             string.Empty,
             mainProcess.ExecutablePath,
-            family);
+            family)
+        {
+            HasPartialProtectionBadge = isPartiallyProtected
+        };
     }
 
     private static RetentionStatusIcon RetentionIconFor(ProcessRetentionIndicator indicator) => indicator switch
@@ -1375,6 +1509,7 @@ public partial class MainWindow : Window
         {
             return;
         }
+        if (IsInsideOpenManagedPopup(source)) return;
         CloseManagedPopups();
         if (TryClosePopupFromTrigger(source))
         {
@@ -1433,6 +1568,7 @@ public partial class MainWindow : Window
 
     private Popup? ResolveManagedPopup(Button button) =>
         ReferenceEquals(button, ScheduleMenuButton) ? SchedulePopup
+        : ReferenceEquals(button, GlobalReclaimScheduleMenuButton) ? GlobalReclaimSchedulePopup
         : ReferenceEquals(button, CandidateModeMenuButton) ? CandidateModePopup
         : ReferenceEquals(button, UpdateFrequencyMenuButton) ? UpdateFrequencyPopup
         : button.Parent is Grid parent
@@ -1460,6 +1596,7 @@ public partial class MainWindow : Window
     private void CloseManagedPopups(Popup? except = null)
     {
         if (!ReferenceEquals(SchedulePopup, except)) SchedulePopup.IsOpen = false;
+        if (!ReferenceEquals(GlobalReclaimSchedulePopup, except)) GlobalReclaimSchedulePopup.IsOpen = false;
         if (!ReferenceEquals(CandidateModePopup, except)) CandidateModePopup.IsOpen = false;
         if (!ReferenceEquals(UpdateFrequencyPopup, except)) UpdateFrequencyPopup.IsOpen = false;
         foreach (var popup in _openApplicationRulePopups.ToArray())
@@ -1468,11 +1605,28 @@ public partial class MainWindow : Window
         }
     }
 
+    private bool IsInsideOpenManagedPopup(DependencyObject source)
+    {
+        if (IsInsidePopup(source, SchedulePopup) ||
+            IsInsidePopup(source, GlobalReclaimSchedulePopup) ||
+            IsInsidePopup(source, CandidateModePopup) ||
+            IsInsidePopup(source, UpdateFrequencyPopup))
+        {
+            return true;
+        }
+
+        return _openApplicationRulePopups.Any(popup => IsInsidePopup(source, popup));
+    }
+
+    private static bool IsInsidePopup(DependencyObject source, Popup popup) =>
+        popup.IsOpen && popup.Child is DependencyObject content && IsDescendantOf(source, content);
+
     private bool TryClosePopupFromTrigger(DependencyObject source)
     {
         var button = FindAncestorButton(source);
         if (button is null) return false;
         Popup? popup = ReferenceEquals(button, ScheduleMenuButton) ? SchedulePopup
+            : ReferenceEquals(button, GlobalReclaimScheduleMenuButton) ? GlobalReclaimSchedulePopup
             : ReferenceEquals(button, CandidateModeMenuButton) ? CandidateModePopup
             : ReferenceEquals(button, CandidateDisplayMenuButton) ? CandidateDisplayPopup
             : ReferenceEquals(StableAnchorPopup.PlacementTarget, button) ? StableAnchorPopup
@@ -3521,6 +3675,8 @@ public partial class MainWindow : Window
                 _state.LastResult = T(_lastResultFallbackKey);
                 _state.RecentTrim = "--";
                 _state.BoostNetGain = "--";
+                _recentTrimBytes = null;
+                _recentNetGainBytes = null;
                 _state.Status = TF("OptimizationRunStatusFormat", plan.Candidates.Count, succeeded, skipped, failed);
                 _diagnosticLog.Warning(
                     $"Optimization completed without a successful trim request; skipped {skipped}, failed {failed}.");
@@ -3541,8 +3697,10 @@ public partial class MainWindow : Window
             _cumulativeTrimBytes = checked(_cumulativeTrimBytes + workingSetReduction);
             _cumulativeNetGainBytes = checked(_cumulativeNetGainBytes + netAvailable);
             _state.RecentTrim = FormatMetricBytes(workingSetReduction);
+            _recentTrimBytes = workingSetReduction;
             _state.CumulativeTrim = FormatMetricBytes(_cumulativeTrimBytes);
             _state.BoostNetGain = FormatMetricBytes(netAvailable);
+            _recentNetGainBytes = netAvailable;
             _state.CumulativeNetGain = FormatMetricBytes(_cumulativeNetGainBytes);
             _reboundTracker.Begin(before, after, reboundStartedAt);
             UpdateApplicationReboundSummary();
@@ -3715,6 +3873,97 @@ public partial class MainWindow : Window
         CandidateModePopup.IsOpen = false;
         CandidateDisplayPopup.IsOpen = false;
         SchedulePopup.IsOpen = !SchedulePopup.IsOpen;
+    }
+
+    private void GlobalReclaimScheduleMenuButton_OnClick(object sender, RoutedEventArgs e)
+    {
+        if (ConsumeSuppressedPopupTriggerClick(sender)) return;
+        GlobalReclaimSchedulePopup.IsOpen = !GlobalReclaimSchedulePopup.IsOpen;
+    }
+
+    private void SynchronizeGlobalReclaimScheduleControls()
+    {
+        var wasSyncing = _syncingControls;
+        _syncingControls = true;
+        try
+        {
+            GlobalReclaimIntervalCheckBox.IsChecked = _settings.GlobalReclaimIntervalEnabled;
+            GlobalReclaimStartupDelayCheckBox.IsChecked = _settings.GlobalReclaimStartupDelayEnabled;
+            GlobalReclaimIntervalTextBox.Text = GlobalReclaimSchedulePolicy.NormalizeInterval(
+                _settings.GlobalReclaimIntervalMinutes).ToString(CultureInfo.InvariantCulture);
+            GlobalReclaimStartupDelayTextBox.Text = GlobalReclaimSchedulePolicy.NormalizeStartupDelay(
+                _settings.GlobalReclaimStartupDelayMinutes).ToString(CultureInfo.InvariantCulture);
+            GlobalReclaimIntervalTextBox.IsEnabled = _settings.GlobalReclaimIntervalEnabled;
+            GlobalReclaimStartupDelayTextBox.IsEnabled = _settings.GlobalReclaimStartupDelayEnabled;
+            GlobalReclaimScheduleValidationText.Visibility = Visibility.Collapsed;
+        }
+        finally
+        {
+            _syncingControls = wasSyncing;
+        }
+    }
+
+    private void GlobalReclaimScheduleCheckBox_OnChanged(object sender, RoutedEventArgs e)
+    {
+        if (_syncingControls) return;
+        var intervalEnabled = GlobalReclaimIntervalCheckBox.IsChecked == true;
+        var startupDelayEnabled = GlobalReclaimStartupDelayCheckBox.IsChecked == true;
+        if (!TryUpdateSettings(settings =>
+            {
+                settings.GlobalReclaimIntervalEnabled = intervalEnabled;
+                settings.GlobalReclaimStartupDelayEnabled = startupDelayEnabled;
+            }))
+        {
+            SynchronizeGlobalReclaimScheduleControls();
+            return;
+        }
+        _globalReclaimIntervalAnchor = DateTimeOffset.UtcNow;
+        _globalReclaimStartupDelayCompleted = !startupDelayEnabled ||
+                                              DateTimeOffset.UtcNow - WindowsBootStartedAt() >=
+                                              TimeSpan.FromMinutes(GlobalReclaimSchedulePolicy.NormalizeStartupDelay(
+                                                  _settings.GlobalReclaimStartupDelayMinutes));
+        SynchronizeGlobalReclaimScheduleControls();
+    }
+
+    private void GlobalReclaimScheduleTextBox_OnKeyDown(object sender, System.Windows.Input.KeyEventArgs e)
+    {
+        if (e.Key != System.Windows.Input.Key.Enter) return;
+        GlobalReclaimScheduleApply_OnClick(sender, e);
+        e.Handled = true;
+    }
+
+    private void GlobalReclaimScheduleApply_OnClick(object sender, RoutedEventArgs e)
+    {
+        if (!int.TryParse(GlobalReclaimIntervalTextBox.Text, NumberStyles.None, CultureInfo.InvariantCulture,
+                out var interval) ||
+            interval is < GlobalReclaimSchedulePolicy.MinimumIntervalMinutes or > GlobalReclaimSchedulePolicy.MaximumIntervalMinutes ||
+            !int.TryParse(GlobalReclaimStartupDelayTextBox.Text, NumberStyles.None, CultureInfo.InvariantCulture,
+                out var startupDelay) ||
+            startupDelay is < GlobalReclaimSchedulePolicy.MinimumStartupDelayMinutes or > GlobalReclaimSchedulePolicy.MaximumStartupDelayMinutes)
+        {
+            GlobalReclaimScheduleValidationText.Text = TF(
+                "GlobalReclaimScheduleRangeFormat",
+                GlobalReclaimSchedulePolicy.MinimumIntervalMinutes,
+                GlobalReclaimSchedulePolicy.MaximumIntervalMinutes,
+                GlobalReclaimSchedulePolicy.MinimumStartupDelayMinutes,
+                GlobalReclaimSchedulePolicy.MaximumStartupDelayMinutes);
+            GlobalReclaimScheduleValidationText.Visibility = Visibility.Visible;
+            return;
+        }
+        if (!TryUpdateSettings(settings =>
+            {
+                settings.GlobalReclaimIntervalMinutes = interval;
+                settings.GlobalReclaimStartupDelayMinutes = startupDelay;
+            }))
+        {
+            SynchronizeGlobalReclaimScheduleControls();
+            return;
+        }
+        _globalReclaimIntervalAnchor = DateTimeOffset.UtcNow;
+        _globalReclaimStartupDelayCompleted = !_settings.GlobalReclaimStartupDelayEnabled ||
+                                              DateTimeOffset.UtcNow - WindowsBootStartedAt() >=
+                                              TimeSpan.FromMinutes(startupDelay);
+        SynchronizeGlobalReclaimScheduleControls();
     }
 
     private void CandidateModePopup_OnClosed(object? sender, EventArgs e)
@@ -4760,6 +5009,207 @@ public partial class MainWindow : Window
                 _families,
                 selectedServices,
                 enhancedSafety);
+        }
+        finally
+        {
+            SetBusyState(false);
+            UpdateMonitoringInterval();
+        }
+    }
+
+    private async void GlobalReclaim_OnClick(object sender, RoutedEventArgs e)
+    {
+        if (_state.IsBusy) return;
+        if (ShowThemedMessage(
+                T("GlobalReclaim"),
+                T("GlobalReclaimConfirm"),
+                MessageBoxButton.YesNo,
+                MessageBoxImage.Warning,
+                affirmativeText: T("GlobalReclaimConfirmAction"),
+                negativeText: T("Cancel")) != MessageBoxResult.Yes) return;
+
+        await RunGlobalReclaimAsync(automatic: false);
+    }
+
+    private bool IsGlobalReclaimDue(DateTimeOffset now)
+    {
+        if (_settings.GlobalReclaimStartupDelayEnabled && !_globalReclaimStartupDelayCompleted &&
+            now - WindowsBootStartedAt() >= TimeSpan.FromMinutes(
+                GlobalReclaimSchedulePolicy.NormalizeStartupDelay(
+                    _settings.GlobalReclaimStartupDelayMinutes))) return true;
+        return _settings.GlobalReclaimIntervalEnabled &&
+               now - _globalReclaimIntervalAnchor >= TimeSpan.FromMinutes(
+                   GlobalReclaimSchedulePolicy.NormalizeInterval(_settings.GlobalReclaimIntervalMinutes));
+    }
+
+    private static DateTimeOffset WindowsBootStartedAt() =>
+        DateTimeOffset.UtcNow - TimeSpan.FromMilliseconds(Environment.TickCount64);
+
+    private async Task RunGlobalReclaimAsync(bool automatic)
+    {
+        if (_state.IsBusy) return;
+        SetBusyState(true);
+        try
+        {
+            if (!await RefreshSnapshotAsync(waitForCurrentRefresh: true)) return;
+            var memoryBefore = _currentMemory;
+
+            var protection = CurrentProtectionRules();
+            var protectionContext = protection.CreateContext(_families.SelectMany(family => family.Processes));
+            var targetFamilies = _families
+                .Select(family => protection.FilterUnprotectedProcesses(family, protectionContext))
+                .Where(family => family is not null)
+                .Select(family => family! with
+                {
+                    Processes = family!.Processes
+                        .Where(process => process.ProcessId != Environment.ProcessId &&
+                                          !SystemProcessPolicy.IsAlwaysExcluded(process.Name, process.ExecutablePath))
+                        .ToArray()
+                })
+                .Where(family => family.Processes.Count > 0)
+                .ToArray();
+            var totalTargets = targetFamilies.Sum(family => family.Processes.Count);
+            if (totalTargets == 0)
+            {
+                ShowThemedMessage(T("GlobalReclaim"), T("GlobalReclaimNoTargets"));
+                return;
+            }
+
+            var sampledProcesses = _families.SelectMany(family => family.Processes).ToArray();
+            var index = 0;
+            var succeeded = 0;
+            var skipped = 0;
+            var failed = 0;
+            long workingSetReduction = 0;
+            var startedAt = DateTimeOffset.Now;
+            var reboundSettings = _settings.ResolveReboundSettings();
+            if (_activeGlobalReclaimRunSequence is { } previousSequence)
+            {
+                var previousIndex = _reboundRunHistory.FindIndex(run => run.Sequence == previousSequence);
+                if (previousIndex >= 0 && _reboundRunHistory[previousIndex].State == ReboundObservationState.Observing)
+                {
+                    _reboundRunHistory[previousIndex] = _reboundRunHistory[previousIndex] with
+                    {
+                        FinishedAt = startedAt,
+                        State = ReboundObservationState.Replaced
+                    };
+                }
+            }
+            _globalReclaimDetailTracker.BeginRun(startedAt);
+            _activeGlobalReclaimRunSequence = null;
+
+            foreach (var family in targetFamilies)
+            {
+                long before = 0;
+                long after = 0;
+                var trackedProcessIds = new List<int>();
+                var componentResults = new Dictionary<string, ComponentTrimAccumulator>(
+                    StringComparer.OrdinalIgnoreCase);
+                foreach (var process in family.Processes)
+                {
+                    index++;
+                    _state.Status = TF("GlobalReclaimProgressFormat", index, totalTargets);
+                    var scope = ProcessRelationshipPolicy.BuildSafetyScope(process.ProcessId, sampledProcesses);
+                    var result = await _trimmer.TrimAsync(
+                        process,
+                        scope,
+                        enhancedSafety: false,
+                        allowForegroundProcessTrim: false);
+                    await Dispatcher.Yield(DispatcherPriority.Render);
+                    if (result.Skipped)
+                    {
+                        skipped++;
+                        continue;
+                    }
+                    if (!result.Success)
+                    {
+                        failed++;
+                        continue;
+                    }
+
+                    succeeded++;
+                    if (!result.HasReliableWorkingSetMeasurement) continue;
+                    trackedProcessIds.Add(process.ProcessId);
+                    before += Math.Max(0, result.WorkingSetBeforeBytes);
+                    after += Math.Max(0, result.WorkingSetAfterBytes);
+                    workingSetReduction += Math.Max(0, result.WorkingSetReductionBytes);
+                    var componentKey = ApplicationComponentIdentity.ForProcess(family.Key, process);
+                    if (!componentResults.TryGetValue(componentKey, out var component))
+                    {
+                        component = new ComponentTrimAccumulator(
+                            componentKey,
+                            ExecutablePathIdentity.TryNormalize(process.ExecutablePath, out var executablePath)
+                                ? executablePath
+                                : null);
+                        componentResults.Add(componentKey, component);
+                    }
+                    component.WorkingSetBeforeBytes += Math.Max(0, result.WorkingSetBeforeBytes);
+                    component.WorkingSetAfterBytes += Math.Max(0, result.WorkingSetAfterBytes);
+                    component.ProcessIds.Add(process.ProcessId);
+                    if (process.StartTimeFileTimeUtc is { } startTime)
+                        component.ProcessStartTimes.Add(startTime);
+                }
+
+                if (trackedProcessIds.Count == 0) continue;
+                _globalReclaimDetailTracker.Track(
+                    family.Key,
+                    family.DisplayName,
+                    after,
+                    Math.Max(0, before - after),
+                    trackedProcessIds,
+                    family.Processes.Select(process => process.ProcessId).ToArray(),
+                    family.Processes.Select(process => process.ExecutablePath)
+                        .Where(path => !string.IsNullOrWhiteSpace(path))
+                        .Cast<string>()
+                        .ToArray());
+                foreach (var component in componentResults.Values)
+                {
+                    _applicationBackoffTracker.BeginComponent(
+                        family.Key,
+                        component.ComponentKey,
+                        component.ExecutablePath,
+                        component.WorkingSetBeforeBytes,
+                        component.WorkingSetAfterBytes,
+                        reboundSettings,
+                        startedAt,
+                        learnOutcome: true,
+                        targetProcessIds: component.ProcessIds,
+                        baselineFamilyProcessIds: family.Processes.Select(process => process.ProcessId).ToArray(),
+                        launchSignature: component.ProcessStartTimes.Count == 0
+                            ? null
+                            : string.Join(',', component.ProcessStartTimes.OrderBy(value => value)),
+                        recoveryOrigin: NaturalStableObservationOrigin.GlobalReclaim);
+                }
+            }
+
+            SynchronizeGlobalReclaimRunHistory(DateTimeOffset.Now);
+            SaveReboundHistoryIfDue(DateTimeOffset.Now, force: true);
+            if (workingSetReduction > 0)
+            {
+                _cumulativeTrimBytes = checked(_cumulativeTrimBytes + workingSetReduction);
+                _state.RecentTrim = FormatMetricBytes(workingSetReduction);
+                _recentTrimBytes = workingSetReduction;
+                _state.CumulativeTrim = FormatMetricBytes(_cumulativeTrimBytes);
+                if (_memoryStatus.TryGetSnapshot(out var memoryAfter))
+                {
+                    var netAvailable = checked((long)memoryAfter.AvailablePhysicalBytes -
+                                               (long)memoryBefore.AvailablePhysicalBytes);
+                    _cumulativeNetGainBytes = checked(_cumulativeNetGainBytes + netAvailable);
+                    _state.BoostNetGain = FormatMetricBytes(netAvailable);
+                    _recentNetGainBytes = netAvailable;
+                    _state.CumulativeNetGain = FormatMetricBytes(_cumulativeNetGainBytes);
+                    UpdateMetrics(memoryAfter);
+                }
+                else
+                {
+                    _state.BoostNetGain = "--";
+                    _recentNetGainBytes = null;
+                }
+            }
+            _state.Status = TF("GlobalReclaimCompletedFormat", succeeded, skipped, failed);
+            _state.LastResult = T("GlobalReclaimRecorded");
+            _lastResultFallbackKey = "GlobalReclaimRecorded";
+            UpdateApplicationReboundSummary();
         }
         finally
         {
@@ -6645,6 +7095,41 @@ public partial class MainWindow : Window
         };
     }
 
+    private void SynchronizeGlobalReclaimRunHistory(DateTimeOffset now)
+    {
+        var details = _globalReclaimDetailTracker.Details;
+        if (details.Count == 0) return;
+
+        if (_activeGlobalReclaimRunSequence is null)
+        {
+            var sequence = ++_nextReboundRunSequence;
+            _activeGlobalReclaimRunSequence = sequence;
+            _reboundRunHistory.Insert(0, new ReboundHistoryRun(
+                sequence,
+                OptimizationRunKind.GlobalReclaim,
+                _globalReclaimDetailTracker.StartedAt ?? now,
+                null,
+                ReboundObservationState.Observing,
+                Array.Empty<ReboundHistoryDetail>()));
+        }
+
+        var index = _reboundRunHistory.FindIndex(run => run.Sequence == _activeGlobalReclaimRunSequence.Value);
+        if (index < 0) return;
+        var tracking = _globalReclaimDetailTracker.IsTracking(now);
+        _reboundRunHistory[index] = _reboundRunHistory[index] with
+        {
+            FinishedAt = tracking
+                ? null
+                : _globalReclaimDetailTracker.CompletedAt ??
+                  _globalReclaimDetailTracker.ExpectedCompletionAt ?? now,
+            State = tracking ? ReboundObservationState.Observing : ReboundObservationState.Completed,
+            Details = details.Select(detail => new ReboundHistoryDetail(
+                detail.DisplayName,
+                detail.ReleasedBytes,
+                detail.RegainedBytes)).ToArray()
+        };
+    }
+
     private void ReboundDetails_OnClick(object sender, RoutedEventArgs e)
     {
         SynchronizeReboundRunHistory(DateTimeOffset.Now);
@@ -6667,6 +7152,7 @@ public partial class MainWindow : Window
         OptimizationRunKind.Scheduled => "ReboundRunScheduled",
         OptimizationRunKind.LongIdle => "ReboundRunLongIdle",
         OptimizationRunKind.ApplicationRule => "ReboundRunApplicationRule",
+        OptimizationRunKind.GlobalReclaim => "ReboundRunGlobalReclaim",
         _ => "ReboundRunAutomatic"
     });
 
@@ -6674,6 +7160,7 @@ public partial class MainWindow : Window
     {
         var now = DateTimeOffset.Now;
         SynchronizeReboundRunHistory(now);
+        SynchronizeGlobalReclaimRunHistory(now);
         var visibleRuns = (_reboundHistoryLimit > 0
                 ? _reboundRunHistory.Take(_reboundHistoryLimit)
                 : _reboundRunHistory)
@@ -6982,6 +7469,7 @@ public partial class MainWindow : Window
             OptimizationRunKind.Scheduled => "ReboundRunScheduled",
             OptimizationRunKind.LongIdle => "ReboundRunLongIdle",
             OptimizationRunKind.ApplicationRule => "ReboundRunApplicationRule",
+            OptimizationRunKind.GlobalReclaim => "ReboundRunGlobalReclaim",
             _ => "ReboundRunAutomatic"
         });
 
@@ -7864,6 +8352,7 @@ public partial class MainWindow : Window
 
     private void RefreshOverviewAttention(int? protectionFamilyCount = null)
     {
+        CurrentVersionText.Text = TF("CurrentVersion", AppVersion.Current);
         LatestVersionText.Text = TF(
             "LatestVersionFormat",
             (_availableUpdate?.Version ?? AppVersion.Current).ToString());
@@ -8005,6 +8494,29 @@ public partial class MainWindow : Window
         object sender,
         System.Windows.Input.MouseEventArgs e) =>
         StopStableAnchorSummaryAutoScroll(sender as ScrollViewer);
+
+    private void StableAnchorSummaryScroller_OnPreviewMouseWheel(
+        object sender,
+        System.Windows.Input.MouseWheelEventArgs e)
+    {
+        if (sender is not ScrollViewer scrollViewer) return;
+
+        for (var parent = ParentOf(scrollViewer); parent is not null; parent = ParentOf(parent))
+        {
+            if (parent is not ScrollViewer { ScrollableHeight: > 0.5d } pageScroller) continue;
+
+            e.Handled = true;
+            pageScroller.RaiseEvent(new System.Windows.Input.MouseWheelEventArgs(
+                e.MouseDevice,
+                e.Timestamp,
+                e.Delta)
+            {
+                RoutedEvent = System.Windows.Input.Mouse.MouseWheelEvent,
+                Source = scrollViewer
+            });
+            return;
+        }
+    }
 
     private void StableAnchorSummaryScroller_OnUnloaded(object sender, RoutedEventArgs e) =>
         StopStableAnchorSummaryAutoScroll(sender as ScrollViewer);
@@ -9218,8 +9730,7 @@ public partial class MainWindow : Window
             RefreshOverviewAttention();
             if (!manual && string.Equals(_settings.SuppressedUpdateVersion,
                     result.Asset.Version.ToString(), StringComparison.OrdinalIgnoreCase)) return;
-            if (!manual && _automaticUpdatePromptShown) return;
-            if (!manual) _automaticUpdatePromptShown = true;
+            if (!manual) return;
             await HandleAvailableUpdateAsync(result.Asset);
         }
         catch (Exception exception)
@@ -9416,7 +9927,6 @@ public partial class MainWindow : Window
                 .Concat(_applicationBackoffTracker.NaturalStableObservationComponentKeys())
                 .Concat(_applicationBackoffTracker.NaturalStableGrowthReviewComponentKeys())
                 .Concat(_applicationBackoffTracker.NaturalStableProvisionalValidationComponentKeys())
-                .Concat(_applicationBackoffTracker.NaturalStableRecoveryEligibleComponentKeys(now))
                 .ToHashSet(StringComparer.OrdinalIgnoreCase);
         }
         return (
@@ -10775,6 +11285,7 @@ public partial class MainWindow : Window
 
     private void LoadRuntimeProgress(RuntimeProgressDocument progress, DateTimeOffset now)
     {
+        _applicationBackoffTracker.EnablePersistedSessionHoldRestoration();
         _restoredSessionUptime = RuntimeProgressPolicy.RestoreDuration(progress.SessionUptimeSeconds);
         _scheduledOptimizationAnchor = RuntimeProgressPolicy.RestoreAnchor(
             progress.ScheduledOptimizationElapsedSeconds,
@@ -10787,6 +11298,16 @@ public partial class MainWindow : Window
             : null;
         _cumulativeTrimBytes = Math.Max(0, progress.CumulativeTrimBytes);
         _cumulativeNetGainBytes = progress.CumulativeNetGainBytes;
+        if (progress.RecentTrimBytes is { } recentTrim)
+        {
+            _recentTrimBytes = recentTrim;
+            _state.RecentTrim = FormatMetricBytes(recentTrim);
+        }
+        if (progress.RecentNetGainBytes is { } recentNetGain)
+        {
+            _recentNetGainBytes = recentNetGain;
+            _state.BoostNetGain = FormatMetricBytes(recentNetGain);
+        }
         _state.CumulativeTrim = FormatMetricBytes(_cumulativeTrimBytes);
         _state.CumulativeNetGain = FormatMetricBytes(_cumulativeNetGainBytes);
         _pendingRuntimeActivities = progress.Activities.ToList();
@@ -10796,6 +11317,8 @@ public partial class MainWindow : Window
             progress.NaturalStableObservations,
             progress.SavedAtUtc,
             now);
+        _applicationBackoffTracker.RestoreHistoricalReviewSessionProgress(
+            progress.HistoricalReviewSessions);
         _pendingApplicationRuleProgress = progress.ApplicationRuleTargets ??
                                           Array.Empty<ApplicationOptimizationRuleTargetProgress>();
     }
@@ -10970,6 +11493,8 @@ public partial class MainWindow : Window
                 : null,
             _cumulativeTrimBytes,
             _cumulativeNetGainBytes,
+            _recentTrimBytes,
+            _recentNetGainBytes,
             activities,
             trimHistory,
             _applicationBackoffTracker.CaptureProgress(now),
@@ -10977,7 +11502,8 @@ public partial class MainWindow : Window
             _applicationRuleRuntime.CaptureProgress(
                 ApplicationOptimizationRuleSettings.Resolve(_settings),
                 now),
-            _applicationBackoffTracker.CaptureNaturalStableObservationProgress());
+            _applicationBackoffTracker.CaptureNaturalStableObservationProgress(),
+            _applicationBackoffTracker.CaptureHistoricalReviewSessionProgress());
     }
 
     private void SaveBenefitLearning()
