@@ -72,7 +72,7 @@ public sealed class MainWindowLayoutContractTests
         Assert.Contains("_openApplicationRulePopups.Any(popup => IsInsidePopup(source, popup))", code);
         Assert.Contains("popup.IsOpen && popup.Child is DependencyObject content && IsDescendantOf(source, content)", code);
         Assert.Equal(6, CountOccurrences(layout, "PreviewMouseLeftButtonDown=\"ManagedPopupTrigger_OnPreviewMouseLeftButtonDown\""));
-        Assert.Equal(6, CountOccurrences(layout, "StaysOpen=\"True\""));
+        Assert.Equal(7, CountOccurrences(layout, "StaysOpen=\"True\""));
         Assert.True(CountOccurrences(code, "ConsumeSuppressedPopupTriggerClick(sender)") >= 6);
         Assert.Contains("var suppressHistoryButtonClick = false;", code);
         Assert.Contains("suppressHistoryButtonClick = true;", code);
@@ -81,7 +81,7 @@ public sealed class MainWindowLayoutContractTests
         Assert.Contains("x:Key=\"FadePopupStyle\"", layout);
         Assert.Contains("x:Name=\"SchedulePopup\" Style=\"{StaticResource FadePopupStyle}\"", layout);
         Assert.Contains("x:Name=\"CandidateModePopup\" Style=\"{StaticResource FadePopupStyle}\"", layout);
-        Assert.Equal(6, CountOccurrences(layout, "Style=\"{StaticResource FadePopupStyle}\""));
+        Assert.Equal(7, CountOccurrences(layout, "Style=\"{StaticResource FadePopupStyle}\""));
     }
 
     [Fact]
@@ -982,13 +982,17 @@ public sealed class MainWindowLayoutContractTests
     [Fact]
     public void StableAnchorSettingsButtonClosesItsPopupWithoutReopening()
     {
+        var document = LoadDocument();
         var code = File.ReadAllText(CodeFixturePath());
+        var popup = FindNamedElement(document, "StableAnchorPopup");
 
         Assert.Contains("private bool TryClosePopupFromTrigger", code);
         Assert.Contains("ReferenceEquals(StableAnchorPopup.PlacementTarget, button) ? StableAnchorPopup", code);
         Assert.Contains("popup.IsOpen = false;", code);
         Assert.Contains("_suppressedPopupTriggerClicks.Add(button);", code);
         Assert.Contains("ConsumeSuppressedPopupTriggerClick(sender)", code);
+        Assert.Contains("StableAnchorSettings_OnPreviewMouseLeftButtonDown", code);
+        Assert.Contains("Style=\"{StaticResource FadePopupStyle}\"", popup.ToString());
     }
 
     [Fact]

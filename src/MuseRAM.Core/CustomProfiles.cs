@@ -1436,6 +1436,7 @@ public sealed class ApplicationReboundBackoffTracker
                 StableAnchorLearningPolicy.NormalizeSamples(existingRecord)
                     .Where(sample => string.Equals(sample.LaunchSignature,
                         snapshot.LaunchSignature, StringComparison.Ordinal))
+                    .Where(sample => !sample.PendingHigh)
                     .OrderByDescending(sample => sample.ObservedAt)
                     .FirstOrDefault() is { } currentLaunchSample)
             {

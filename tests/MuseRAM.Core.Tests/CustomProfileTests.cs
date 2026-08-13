@@ -2931,7 +2931,7 @@ public sealed class ApplicationReboundBackoffTrackerTests
             new ApplicationStableSample(206 * mib, now - TimeSpan.FromMinutes(2),
                 "launch-1", "cycle-2", 1, PendingHigh: false),
             new ApplicationStableSample(226 * mib, now - TimeSpan.FromMinutes(1),
-                "launch-1", "cycle-3", 1, PendingHigh: true)
+                "launch-1", "cycle-3", 1, PendingHigh: false)
         };
         var record = new ApplicationStableLearningRecord(
             "app", samples.Select(sample => sample.WorkingSetBytes).ToArray(),
@@ -2957,6 +2957,35 @@ public sealed class ApplicationReboundBackoffTrackerTests
         var status = Assert.Single(tracker.StableCandidateStatuses);
         Assert.Equal(ApplicationStableCandidateState.Converged, status.State);
         Assert.Equal(226 * mib, status.CandidateBytes);
+    }
+
+    [Fact]
+    public void PersistedPendingHighSampleDoesNotRebuildSessionHold()
+    {
+        const long mib = 1024L * 1024;
+        const string componentKey = "app|component:main";
+        var scopeKey = ApplicationStableScopeIdentity.For("app", new[] { componentKey });
+        var now = DateTimeOffset.UtcNow;
+        var record = new ApplicationStableLearningRecord("app", new[] { 200 * mib }, now, "launch-1")
+        {
+            ComponentKeys = new[] { componentKey },
+            ModelVersion = StableStateSuppressionPolicy.NaturalStableStateModelVersion,
+            StableSamples = new[] { new ApplicationStableSample(600 * mib, now, "launch-1", "cycle-1", 1, PendingHigh: true) },
+            AnchorGeneration = 1,
+            AnchorGenerationBaselineBytes = 200 * mib
+        };
+        var tracker = new ApplicationReboundBackoffTracker(
+            Array.Empty<ApplicationBenefitLearningRecord>(), now, new[] { record });
+        tracker.EnablePersistedSessionHoldRestoration();
+
+        tracker.ObserveNaturalStableStates(new[] { new NaturalStableStateSnapshot(
+            "app", scopeKey, new[] { componentKey }, "launch-1", 600 * mib,
+            IsForeground: false, IsLowActivity: true) }, now,
+            StableStateSuppressionSettings.For(OptimizationProfile.Turbo));
+
+        Assert.DoesNotContain(tracker.StableCandidateStatuses,
+            status => status.State == ApplicationStableCandidateState.Converged);
+        Assert.Empty(tracker.NaturalStableReviewComponentKeys());
     }
 
     [Fact]

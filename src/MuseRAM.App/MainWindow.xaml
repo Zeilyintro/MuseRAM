@@ -2281,7 +2281,7 @@
                               <Button x:Name="StableAnchorSettingsButton" Tag="{Binding}" Style="{StaticResource StableAnchorSettingsButtonStyle}"
                                       VerticalAlignment="Center"
                                       IsEnabled="{Binding CanConfigureAnchor}" ToolTip="{Binding StableAnchorSettingsHelp}" ToolTipService.ShowOnDisabled="True"
-                                      AutomationProperties.Name="{DynamicResource StableAnchorSettings}" Click="StableAnchorSettings_OnClick">
+                                      AutomationProperties.Name="{DynamicResource StableAnchorSettings}" PreviewMouseLeftButtonDown="StableAnchorSettings_OnPreviewMouseLeftButtonDown" Click="StableAnchorSettings_OnClick">
                                 <TextBlock FontFamily="{StaticResource IconFontFamily}" FontSize="14" Text="&#xE713;"/>
                               </Button>
                             </StackPanel>
@@ -2365,7 +2365,7 @@
                     </ItemsControl.ItemTemplate>
                   </ItemsControl>
                 </ScrollViewer>
-                <Popup x:Name="StableAnchorPopup" Grid.Row="3" Placement="Right" StaysOpen="False" AllowsTransparency="True"
+                <Popup x:Name="StableAnchorPopup" Grid.Row="3" Style="{StaticResource FadePopupStyle}" Placement="Right" StaysOpen="True" AllowsTransparency="True"
                        HorizontalOffset="8" Closed="StableAnchorPopup_OnClosed">
                   <Border Width="356" Padding="18" Background="{DynamicResource SurfaceRaisedBrush}" BorderBrush="{DynamicResource BorderBrush}"
                           BorderThickness="1" CornerRadius="6">

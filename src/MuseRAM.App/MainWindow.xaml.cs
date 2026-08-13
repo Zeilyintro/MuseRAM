@@ -1571,6 +1571,7 @@ public partial class MainWindow : Window
         : ReferenceEquals(button, GlobalReclaimScheduleMenuButton) ? GlobalReclaimSchedulePopup
         : ReferenceEquals(button, CandidateModeMenuButton) ? CandidateModePopup
         : ReferenceEquals(button, UpdateFrequencyMenuButton) ? UpdateFrequencyPopup
+        : ReferenceEquals(StableAnchorPopup.PlacementTarget, button) ? StableAnchorPopup
         : button.Parent is Grid parent
             ? parent.Children.OfType<Popup>().FirstOrDefault(candidate =>
                 candidate.StaysOpen && ReferenceEquals(candidate.PlacementTarget, button))
@@ -1599,6 +1600,7 @@ public partial class MainWindow : Window
         if (!ReferenceEquals(GlobalReclaimSchedulePopup, except)) GlobalReclaimSchedulePopup.IsOpen = false;
         if (!ReferenceEquals(CandidateModePopup, except)) CandidateModePopup.IsOpen = false;
         if (!ReferenceEquals(UpdateFrequencyPopup, except)) UpdateFrequencyPopup.IsOpen = false;
+        if (!ReferenceEquals(StableAnchorPopup, except)) StableAnchorPopup.IsOpen = false;
         foreach (var popup in _openApplicationRulePopups.ToArray())
         {
             if (!ReferenceEquals(popup, except)) popup.IsOpen = false;
@@ -1610,7 +1612,8 @@ public partial class MainWindow : Window
         if (IsInsidePopup(source, SchedulePopup) ||
             IsInsidePopup(source, GlobalReclaimSchedulePopup) ||
             IsInsidePopup(source, CandidateModePopup) ||
-            IsInsidePopup(source, UpdateFrequencyPopup))
+            IsInsidePopup(source, UpdateFrequencyPopup) ||
+            IsInsidePopup(source, StableAnchorPopup))
         {
             return true;
         }
@@ -8597,6 +8600,25 @@ public partial class MainWindow : Window
             sender is not Button { Tag: BenefitLearningRow row } button ||
             !row.CanConfigureAnchor ||
             string.IsNullOrWhiteSpace(row.ScopeKey)) return;
+        OpenStableAnchorEditor(button, row);
+    }
+
+    private void StableAnchorSettings_OnPreviewMouseLeftButtonDown(
+        object sender,
+        System.Windows.Input.MouseButtonEventArgs e)
+    {
+        if (_state.IsBusy || sender is not Button { Tag: BenefitLearningRow row } button ||
+            !row.CanConfigureAnchor || string.IsNullOrWhiteSpace(row.ScopeKey)) return;
+        var open = !ReferenceEquals(StableAnchorPopup.PlacementTarget, button) ||
+                   !StableAnchorPopup.IsOpen;
+        CloseManagedPopups(StableAnchorPopup);
+        if (open) OpenStableAnchorEditor(button, row);
+        else StableAnchorPopup.IsOpen = false;
+        e.Handled = true;
+    }
+
+    private void OpenStableAnchorEditor(Button button, BenefitLearningRow row)
+    {
         _editingStableAnchorRow = row;
         _loadingStableAnchorEditor = true;
         _stableAnchorValueChanged = false;
