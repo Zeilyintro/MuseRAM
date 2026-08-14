@@ -544,6 +544,7 @@ public enum NaturalStableObservationOrigin
     PostTrim,
     GlobalReclaim,
     BackoffRecovery,
+    SampleBoundedConfirmation,
     HistoricalBoundedConfirmation
 }
 
@@ -585,7 +586,11 @@ public sealed record NaturalStableReviewSchedule(
     int InitialReviewTarget,
     int HighMigrationRecoveryCycleCount,
     int RequiredHighMigrationRecoveryCycles,
-    bool AwaitingNewRecoveryCycle);
+    bool AwaitingNewRecoveryCycle)
+{
+    public bool IsSampleReview { get; init; }
+    public int CurrentLaunchSampleCount { get; init; }
+}
 
 public sealed record HistoricalReviewSessionProgress(
     string ScopeKey,

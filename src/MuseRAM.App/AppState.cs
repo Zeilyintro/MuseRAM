@@ -132,6 +132,7 @@ public enum ProcessRetentionIndicator
     SessionStableState,
     LongTermStableState,
     NaturalStableObservation,
+    NaturalStableSampleReview,
     NaturalStableReview,
     NaturalStableGrowthReview,
     BenefitObservation,
@@ -159,6 +160,7 @@ public static class ProcessRetentionPresentation
         bool hasLongTermStableReference = false,
         bool isEligible = false,
         bool hasProcessableTargets = false,
+        bool naturalStableSampleReview = false,
         bool naturalStableReview = false,
         bool naturalStableGrowthReview = false,
         bool naturalStableProvisionalValidation = false,
@@ -171,6 +173,7 @@ public static class ProcessRetentionPresentation
             hasLongTermStableReference,
             isEligible,
             hasProcessableTargets,
+            naturalStableSampleReview,
             naturalStableReview,
             naturalStableGrowthReview,
             naturalStableProvisionalValidation,
@@ -188,6 +191,7 @@ public static class ProcessRetentionPresentation
         bool hasLongTermStableReference = false,
         bool isEligible = false,
         bool hasProcessableTargets = false,
+        bool naturalStableSampleReview = false,
         bool naturalStableReview = false,
         bool naturalStableGrowthReview = false,
         bool naturalStableProvisionalValidation = false,
@@ -199,6 +203,7 @@ public static class ProcessRetentionPresentation
             return hasLongTermStableReference
                 ? ProcessRetentionIndicator.BenefitObservationWithHistoricalStable
                 : ProcessRetentionIndicator.BenefitObservation;
+        if (naturalStableSampleReview) return ProcessRetentionIndicator.NaturalStableSampleReview;
         if (naturalStableReview) return ProcessRetentionIndicator.NaturalStableReview;
         if (naturalStableObservation) return ProcessRetentionIndicator.NaturalStableObservation;
         if (hasLongTermStableReference)

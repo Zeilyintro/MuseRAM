@@ -41,6 +41,10 @@
     <SolidColorBrush x:Key="AccentBrush" Color="#7C9CEB" />
     <SolidColorBrush x:Key="AccentHoverBrush" Color="#A8C0FF" />
     <SolidColorBrush x:Key="AccentPressedBrush" Color="#6384D6" />
+    <SolidColorBrush x:Key="PrimaryActionBrush" Color="#7C9CEB" />
+    <SolidColorBrush x:Key="PrimaryActionHoverBrush" Color="#A8C0FF" />
+    <SolidColorBrush x:Key="PrimaryActionPressedBrush" Color="#6384D6" />
+    <SolidColorBrush x:Key="PrimaryActionTextBrush" Color="#111318" />
     <SolidColorBrush x:Key="AccentSoftBrush" Color="#1C2540" />
     <SolidColorBrush x:Key="SuccessBrush" Color="#4ADE80" />
     <SolidColorBrush x:Key="WarningBrush" Color="#D6A13A" />
@@ -315,6 +319,44 @@
         </Setter.Value>
       </Setter>
     </Style>
+    <Style x:Key="PrimaryActionSplitButtonStyle" TargetType="Button">
+      <Setter Property="Height" Value="36" />
+      <Setter Property="Foreground" Value="{DynamicResource PrimaryActionTextBrush}" />
+      <Setter Property="Background" Value="Transparent" />
+      <Setter Property="BorderThickness" Value="0" />
+      <Setter Property="Padding" Value="14,0" />
+      <Setter Property="FontWeight" Value="SemiBold" />
+      <Setter Property="Cursor" Value="Hand" />
+      <Setter Property="FocusVisualStyle" Value="{x:Null}" />
+      <Setter Property="HorizontalContentAlignment" Value="Center" />
+      <Setter Property="VerticalContentAlignment" Value="Center" />
+      <Setter Property="Template">
+        <Setter.Value>
+          <ControlTemplate TargetType="Button">
+            <Grid>
+              <Border x:Name="Root" Background="{TemplateBinding Background}">
+                <ContentPresenter HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}" VerticalAlignment="{TemplateBinding VerticalContentAlignment}" Margin="{TemplateBinding Padding}" />
+              </Border>
+              <Border x:Name="KeyboardFocusRing" Margin="2" BorderBrush="Transparent" BorderThickness="1" IsHitTestVisible="False" />
+            </Grid>
+            <ControlTemplate.Triggers>
+              <Trigger Property="Tag" Value="Left"><Setter TargetName="Root" Property="CornerRadius" Value="6,0,0,6" /></Trigger>
+              <Trigger Property="Tag" Value="Right"><Setter TargetName="Root" Property="CornerRadius" Value="0,6,6,0" /></Trigger>
+              <Trigger Property="IsMouseOver" Value="True"><Setter TargetName="Root" Property="Background" Value="{DynamicResource PrimaryActionHoverBrush}" /></Trigger>
+              <Trigger Property="IsPressed" Value="True"><Setter TargetName="Root" Property="Background" Value="{DynamicResource PrimaryActionPressedBrush}" /></Trigger>
+              <MultiDataTrigger>
+                <MultiDataTrigger.Conditions>
+                  <Condition Binding="{Binding IsKeyboardFocused, RelativeSource={RelativeSource TemplatedParent}}" Value="True" />
+                  <Condition Binding="{Binding Path=(local:InputModality.IsKeyboardMode), RelativeSource={RelativeSource AncestorType=Window}}" Value="True" />
+                </MultiDataTrigger.Conditions>
+                <Setter TargetName="KeyboardFocusRing" Property="BorderBrush" Value="{DynamicResource PrimaryActionTextBrush}" />
+              </MultiDataTrigger>
+              <Trigger Property="IsEnabled" Value="False"><Setter TargetName="Root" Property="Opacity" Value="0.55" /></Trigger>
+            </ControlTemplate.Triggers>
+          </ControlTemplate>
+        </Setter.Value>
+      </Setter>
+    </Style>
     <Style x:Key="PopupMenuButtonStyle" TargetType="Button" BasedOn="{StaticResource ButtonStyle}">
       <Setter Property="Height" Value="34" />
       <Setter Property="Padding" Value="10,3" />
@@ -392,6 +434,13 @@
       <Style.Triggers>
         <Trigger Property="IsMouseOver" Value="True"><Setter Property="Background" Value="{DynamicResource WarningHoverBrush}" /><Setter Property="BorderBrush" Value="{DynamicResource WarningHoverBrush}" /><Setter Property="Foreground" Value="{DynamicResource ActionTextBrush}" /></Trigger>
         <Trigger Property="IsPressed" Value="True"><Setter Property="Background" Value="{DynamicResource WarningPressedBrush}" /><Setter Property="BorderBrush" Value="{DynamicResource WarningPressedBrush}" /><Setter Property="Foreground" Value="{DynamicResource ActionTextBrush}" /></Trigger>
+      </Style.Triggers>
+    </Style>
+    <Style x:Key="DeepReleaseButtonStyle" TargetType="Button" BasedOn="{StaticResource DangerButtonStyle}">
+      <Setter Property="Foreground" Value="{DynamicResource PrimaryActionTextBrush}" />
+      <Style.Triggers>
+        <Trigger Property="IsMouseOver" Value="True"><Setter Property="Foreground" Value="{DynamicResource PrimaryActionTextBrush}" /></Trigger>
+        <Trigger Property="IsPressed" Value="True"><Setter Property="Foreground" Value="{DynamicResource PrimaryActionTextBrush}" /></Trigger>
       </Style.Triggers>
     </Style>
     <Style x:Key="DestructiveActionButtonStyle" TargetType="Button" BasedOn="{StaticResource ButtonStyle}">
@@ -1664,11 +1713,11 @@
                   </Grid>
                   <Grid><Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="12"/><ColumnDefinition/></Grid.ColumnDefinitions>
                     <Grid Grid.Column="0">
-                      <Border Background="{DynamicResource AccentBrush}" BorderBrush="{DynamicResource AccentBrush}" BorderThickness="1" CornerRadius="6">
+                      <Border Background="{DynamicResource PrimaryActionBrush}" BorderBrush="{DynamicResource PrimaryActionBrush}" BorderThickness="1" CornerRadius="6">
                         <Grid><Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="1"/><ColumnDefinition Width="38"/></Grid.ColumnDefinitions>
-                          <Button x:Name="OptimizeNowButton" Tag="Left" Style="{StaticResource PrimarySplitButtonStyle}" Content="{DynamicResource OptimizeNow}" Click="OptimizeNow_OnClick" />
-                          <Border Grid.Column="1" Background="{DynamicResource AccentPressedBrush}" Margin="0,7" />
-                          <Button x:Name="ScheduleMenuButton" Grid.Column="2" Tag="Right" Style="{StaticResource PrimarySplitButtonStyle}" Padding="0" ToolTip="{DynamicResource ScheduledOptimization}" ToolTipService.ShowOnDisabled="True" AutomationProperties.Name="{DynamicResource ScheduledOptimization}" PreviewMouseLeftButtonDown="ManagedPopupTrigger_OnPreviewMouseLeftButtonDown" Click="ScheduleMenuButton_OnClick">
+                          <Button x:Name="OptimizeNowButton" Tag="Left" Style="{StaticResource PrimaryActionSplitButtonStyle}" Content="{DynamicResource OptimizeNow}" Click="OptimizeNow_OnClick" MouseEnter="ActionButton_OnMouseEnter" MouseLeave="ActionButton_OnMouseLeave" />
+                          <Border Grid.Column="1" Background="{DynamicResource PrimaryActionPressedBrush}" Margin="0,7" />
+                          <Button x:Name="ScheduleMenuButton" Grid.Column="2" Tag="Right" Style="{StaticResource PrimaryActionSplitButtonStyle}" Padding="0" ToolTip="{DynamicResource ScheduledOptimization}" ToolTipService.ShowOnDisabled="True" AutomationProperties.Name="{DynamicResource ScheduledOptimization}" PreviewMouseLeftButtonDown="ManagedPopupTrigger_OnPreviewMouseLeftButtonDown" Click="ScheduleMenuButton_OnClick">
                             <TextBlock FontFamily="{StaticResource IconFontFamily}" Text="&#xE70D;" FontSize="12" HorizontalAlignment="Center" VerticalAlignment="Center" TextAlignment="Center" Foreground="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}" />
                           </Button>
                         </Grid>
@@ -1777,14 +1826,14 @@
                 </StackPanel>
                 <Grid Grid.Row="3" Margin="0,12,0,0">
                   <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="8"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
-                  <Button x:Name="DeepReleaseButton" Grid.Column="0" Style="{StaticResource DangerButtonStyle}"
+                  <Button x:Name="DeepReleaseButton" Grid.Column="0" Style="{StaticResource DeepReleaseButtonStyle}"
                           Height="30" Padding="10,0" HorizontalAlignment="Stretch" Content="{DynamicResource DeepRelease}" Click="DeepRelease_OnClick" />
-                  <Border Grid.Column="2" Background="{DynamicResource AccentBrush}" BorderBrush="{DynamicResource AccentBrush}" BorderThickness="1" CornerRadius="6">
+                  <Border Grid.Column="2" Background="{DynamicResource PrimaryActionBrush}" BorderBrush="{DynamicResource PrimaryActionBrush}" BorderThickness="1" CornerRadius="6">
                     <Grid><Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="1"/><ColumnDefinition Width="32"/></Grid.ColumnDefinitions>
-                      <Button x:Name="GlobalReclaimButton" Grid.Column="0" Tag="Left" Style="{StaticResource PrimarySplitButtonStyle}"
-                              Height="30" Padding="10,0" HorizontalAlignment="Stretch" Content="{DynamicResource GlobalReclaim}" ToolTip="{DynamicResource GlobalReclaimHelp}" Click="GlobalReclaim_OnClick" />
-                      <Border Grid.Column="1" Background="{DynamicResource AccentPressedBrush}" Margin="0,7" />
-                      <Button x:Name="GlobalReclaimScheduleMenuButton" Grid.Column="2" Tag="Right" Style="{StaticResource PrimarySplitButtonStyle}"
+                      <Button x:Name="GlobalReclaimButton" Grid.Column="0" Tag="Left" Style="{StaticResource PrimaryActionSplitButtonStyle}"
+                              Height="30" Padding="10,0" HorizontalAlignment="Stretch" Content="{DynamicResource GlobalReclaim}" ToolTip="{DynamicResource GlobalReclaimHelp}" Click="GlobalReclaim_OnClick" MouseEnter="ActionButton_OnMouseEnter" MouseLeave="ActionButton_OnMouseLeave" />
+                      <Border Grid.Column="1" Background="{DynamicResource PrimaryActionPressedBrush}" Margin="0,7" />
+                      <Button x:Name="GlobalReclaimScheduleMenuButton" Grid.Column="2" Tag="Right" Style="{StaticResource PrimaryActionSplitButtonStyle}"
                               Height="30" Padding="0" ToolTip="{DynamicResource GlobalReclaimSchedule}" AutomationProperties.Name="{DynamicResource GlobalReclaimSchedule}"
                               PreviewMouseLeftButtonDown="ManagedPopupTrigger_OnPreviewMouseLeftButtonDown" Click="GlobalReclaimScheduleMenuButton_OnClick">
                         <TextBlock FontFamily="{StaticResource IconFontFamily}" Text="&#xE70D;" FontSize="12" HorizontalAlignment="Center" VerticalAlignment="Center" TextAlignment="Center" Foreground="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}" />
@@ -1798,20 +1847,18 @@
                           <TextBlock Text="{DynamicResource GlobalReclaimInterval}" FontWeight="SemiBold" VerticalAlignment="Center" />
                           <CheckBox x:Name="GlobalReclaimIntervalCheckBox" Grid.Column="1" Style="{StaticResource SafetyToggleStyle}" AutomationProperties.Name="{DynamicResource GlobalReclaimInterval}" Checked="GlobalReclaimScheduleCheckBox_OnChanged" Unchecked="GlobalReclaimScheduleCheckBox_OnChanged" />
                         </Grid>
-                        <Grid Margin="0,10,0,0"><Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="86"/><ColumnDefinition Width="8"/><ColumnDefinition Width="52"/></Grid.ColumnDefinitions>
+                        <Grid Margin="0,10,0,0"><Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="86"/></Grid.ColumnDefinitions>
                           <TextBlock Text="{DynamicResource GlobalReclaimEvery}" Style="{StaticResource CaptionStyle}" VerticalAlignment="Center" />
-                          <TextBox x:Name="GlobalReclaimIntervalTextBox" Grid.Column="1" Style="{StaticResource EditorTextBoxStyle}" Padding="7,4" MaxLength="4" AutomationProperties.Name="{DynamicResource GlobalReclaimEvery}" KeyDown="GlobalReclaimScheduleTextBox_OnKeyDown" />
-                          <Button Grid.Column="3" Style="{StaticResource PrimaryButtonStyle}" Padding="8,4" Content="{DynamicResource Apply}" Click="GlobalReclaimScheduleApply_OnClick" />
+                          <TextBox x:Name="GlobalReclaimIntervalTextBox" Grid.Column="1" Style="{StaticResource EditorTextBoxStyle}" Padding="7,4" MaxLength="4" AutomationProperties.Name="{DynamicResource GlobalReclaimEvery}" KeyDown="GlobalReclaimScheduleTextBox_OnKeyDown" LostKeyboardFocus="GlobalReclaimScheduleTextBox_OnLostKeyboardFocus" />
                         </Grid>
                         <Border Height="1" Background="{DynamicResource BorderBrush}" Margin="0,14,0,12" />
                         <Grid><Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
                           <TextBlock Text="{DynamicResource GlobalReclaimStartupDelay}" FontWeight="SemiBold" VerticalAlignment="Center" />
                           <CheckBox x:Name="GlobalReclaimStartupDelayCheckBox" Grid.Column="1" Style="{StaticResource SafetyToggleStyle}" AutomationProperties.Name="{DynamicResource GlobalReclaimStartupDelay}" Checked="GlobalReclaimScheduleCheckBox_OnChanged" Unchecked="GlobalReclaimScheduleCheckBox_OnChanged" />
                         </Grid>
-                        <Grid Margin="0,10,0,0"><Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="86"/><ColumnDefinition Width="8"/><ColumnDefinition Width="52"/></Grid.ColumnDefinitions>
+                        <Grid Margin="0,10,0,0"><Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="86"/></Grid.ColumnDefinitions>
                           <TextBlock Text="{DynamicResource GlobalReclaimAfterStartup}" Style="{StaticResource CaptionStyle}" VerticalAlignment="Center" />
-                          <TextBox x:Name="GlobalReclaimStartupDelayTextBox" Grid.Column="1" Style="{StaticResource EditorTextBoxStyle}" Padding="7,4" MaxLength="4" AutomationProperties.Name="{DynamicResource GlobalReclaimAfterStartup}" KeyDown="GlobalReclaimScheduleTextBox_OnKeyDown" />
-                          <Button Grid.Column="3" Style="{StaticResource PrimaryButtonStyle}" Padding="8,4" Content="{DynamicResource Apply}" Click="GlobalReclaimScheduleApply_OnClick" />
+                          <TextBox x:Name="GlobalReclaimStartupDelayTextBox" Grid.Column="1" Style="{StaticResource EditorTextBoxStyle}" Padding="7,4" MaxLength="4" AutomationProperties.Name="{DynamicResource GlobalReclaimAfterStartup}" KeyDown="GlobalReclaimScheduleTextBox_OnKeyDown" LostKeyboardFocus="GlobalReclaimScheduleTextBox_OnLostKeyboardFocus" />
                         </Grid>
                         <TextBlock Text="{DynamicResource GlobalReclaimScheduleHint}" Style="{StaticResource CaptionStyle}" Margin="0,8,0,0" TextWrapping="Wrap" />
                         <TextBlock x:Name="GlobalReclaimScheduleValidationText" Style="{StaticResource CaptionStyle}" Foreground="{DynamicResource UltimateBrush}" Margin="0,6,0,0" Visibility="Collapsed" />

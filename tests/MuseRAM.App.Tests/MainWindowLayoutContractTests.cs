@@ -69,6 +69,8 @@ public sealed class MainWindowLayoutContractTests
         Assert.Contains("IsInsidePopup(source, GlobalReclaimSchedulePopup)", code);
         Assert.Contains("IsInsidePopup(source, CandidateModePopup)", code);
         Assert.Contains("IsInsidePopup(source, UpdateFrequencyPopup)", code);
+        Assert.Contains("IsInsideComboBoxDropDown(source, ScheduledOptimizationIntervalBox)", code);
+        Assert.Contains("return comboBox.IsDropDownOpen;", code);
         Assert.Contains("_openApplicationRulePopups.Any(popup => IsInsidePopup(source, popup))", code);
         Assert.Contains("popup.IsOpen && popup.Child is DependencyObject content && IsDescendantOf(source, content)", code);
         Assert.Equal(6, CountOccurrences(layout, "PreviewMouseLeftButtonDown=\"ManagedPopupTrigger_OnPreviewMouseLeftButtonDown\""));
@@ -443,13 +445,23 @@ public sealed class MainWindowLayoutContractTests
     {
         var text = File.ReadAllText(FixturePath());
 
-        Assert.Contains("x:Name=\"DeepReleaseButton\" Grid.Column=\"0\" Style=\"{StaticResource DangerButtonStyle}\"", text);
-        Assert.Contains("x:Name=\"GlobalReclaimButton\" Grid.Column=\"0\" Tag=\"Left\" Style=\"{StaticResource PrimarySplitButtonStyle}\"", text);
+        Assert.Contains("x:Name=\"DeepReleaseButton\" Grid.Column=\"0\" Style=\"{StaticResource DeepReleaseButtonStyle}\"", text);
+        Assert.Contains("x:Name=\"GlobalReclaimButton\" Grid.Column=\"0\" Tag=\"Left\" Style=\"{StaticResource PrimaryActionSplitButtonStyle}\"", text);
         Assert.Contains("x:Name=\"GlobalReclaimSchedulePopup\" Style=\"{StaticResource FadePopupStyle}\"", text);
         Assert.Contains("<Grid Grid.Row=\"3\" Margin=\"0,12,0,0\">", text);
         Assert.Contains("HorizontalAlignment=\"Stretch\"", text);
         Assert.Contains("x:Name=\"SettingsBenefitLearningStatus\"", text);
         Assert.DoesNotContain("<StackPanel VerticalAlignment=\"Center\"><TextBlock Text=\"{DynamicResource IntelligentCandidateSelection}\" FontWeight=\"SemiBold\"/><TextBlock Text=\"{Binding BenefitLearningStatus}\"", text);
+    }
+
+    [Fact]
+    public void GlobalReclaimScheduleDoesNotResetItsAnchorWhenFocusSavesAnUnchangedValue()
+    {
+        var code = File.ReadAllText(CodeFixturePath());
+
+        Assert.Contains("var valueChanged = isInterval", code);
+        Assert.Contains("if (!valueChanged)", code);
+        Assert.Contains("if (isInterval) _globalReclaimIntervalAnchor = DateTimeOffset.UtcNow;", code);
     }
 
     [Fact]
@@ -614,11 +626,12 @@ public sealed class MainWindowLayoutContractTests
         var text = File.ReadAllText(FixturePath());
 
         Assert.Contains("<RowDefinition Height=\"1.15*\"/><RowDefinition Height=\"16\"/><RowDefinition Height=\"0.85*\"/>", text);
-        Assert.Contains("x:Name=\"ScheduleMenuButton\" Grid.Column=\"2\" Tag=\"Right\" Style=\"{StaticResource PrimarySplitButtonStyle}\" Padding=\"0\"", text);
-        Assert.Contains("x:Name=\"OptimizeNowButton\" Tag=\"Left\" Style=\"{StaticResource PrimarySplitButtonStyle}\"", text);
+        Assert.Contains("x:Name=\"ScheduleMenuButton\" Grid.Column=\"2\" Tag=\"Right\" Style=\"{StaticResource PrimaryActionSplitButtonStyle}\" Padding=\"0\"", text);
+        Assert.Contains("x:Name=\"OptimizeNowButton\" Tag=\"Left\" Style=\"{StaticResource PrimaryActionSplitButtonStyle}\"", text);
         Assert.Contains("x:Key=\"PopupTriggerButtonStyle\"", text);
         Assert.Contains("x:Key=\"PrimaryPopupTriggerButtonStyle\"", text);
         Assert.Contains("x:Key=\"PrimarySplitButtonStyle\"", text);
+        Assert.Contains("x:Key=\"PrimaryActionSplitButtonStyle\"", text);
         Assert.Contains("Text=\"{DynamicResource SafeCandidates}\" FontSize=\"17\" FontWeight=\"SemiBold\" VerticalAlignment=\"Center\" ToolTip=\"{DynamicResource CandidateDescription}\"", text);
         Assert.DoesNotContain("Grid.Row=\"2\" Grid.ColumnSpan=\"3\" Text=\"{DynamicResource CandidateDescription}\"", text);
         Assert.Contains("ItemsSource=\"{Binding Candidates}\" MaxHeight=\"280\"", text);
@@ -886,7 +899,8 @@ public sealed class MainWindowLayoutContractTests
         Assert.Contains("LastStableLaunchSignature", refresh);
         Assert.Contains("StableLastObservedAt", refresh);
         Assert.Contains("LearningStableSamplesHelpFormat", refresh);
-        Assert.Contains("StableAnchorLearningPolicy.AcceptedSampleCountForLaunch", refresh);
+        Assert.Contains("normalizedStableSamples.Count(sample =>", refresh);
+        Assert.Contains("!sample.PendingHigh", refresh);
     }
 
     [Fact]
@@ -3483,7 +3497,7 @@ public sealed class MainWindowLayoutContractTests
     {
         var project = XDocument.Load(ProjectFixturePath());
 
-        Assert.Equal("0.1.7.6", project.Descendants("Version").Single().Value);
+        Assert.Equal("0.1.7.7", project.Descendants("Version").Single().Value);
     }
 
     [Fact]

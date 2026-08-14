@@ -813,12 +813,14 @@ public sealed class ApplicationReboundBackoffTrackerTests
     }
 
     [Fact]
-    public void ResetStableAnchorLearningKeepsBenefitLearningAndOtherScopes()
+    public void ResetStableAnchorLearningClearsTheApplicationFamilyButKeepsBenefitLearningAndOtherFamilies()
     {
         const long mib = 1024L * 1024;
         var now = DateTimeOffset.UtcNow;
         var componentKey = "editor|component:main";
         var scopeKey = ApplicationStableScopeIdentity.For("editor", new[] { componentKey });
+        var siblingComponentKey = "editor|component:tray";
+        var siblingScopeKey = ApplicationStableScopeIdentity.For("editor", new[] { siblingComponentKey });
         var otherComponentKey = "browser|component:main";
         var otherScopeKey = ApplicationStableScopeIdentity.For("browser", new[] { otherComponentKey });
         ApplicationStableLearningRecord StableRecord(string familyKey, string component, long bytes) =>
@@ -846,14 +848,24 @@ public sealed class ApplicationReboundBackoffTrackerTests
             new[]
             {
                 StableRecord("editor", componentKey, 500 * mib),
+                StableRecord("editor", siblingComponentKey, 80 * mib),
                 StableRecord("browser", otherComponentKey, 700 * mib)
             });
+
+        tracker.RestoreHistoricalReviewSessionProgress(new[]
+        {
+            new HistoricalReviewSessionProgress(scopeKey, "launch-1", 3),
+            new HistoricalReviewSessionProgress(siblingScopeKey, "launch-1", 2),
+            new HistoricalReviewSessionProgress(otherScopeKey, "launch-1", 1)
+        });
 
         Assert.True(tracker.ResetStableAnchorLearning(scopeKey));
 
         Assert.Single(tracker.LearningRecords);
         var remaining = Assert.Single(tracker.FamilyStableLearningRecords);
         Assert.Equal(otherScopeKey, ApplicationStableScopeIdentity.For(remaining));
+        var sessions = Assert.Single(tracker.CaptureHistoricalReviewSessionProgress());
+        Assert.Equal(otherScopeKey, sessions.ScopeKey);
         Assert.False(tracker.ResetStableAnchorLearning(scopeKey));
     }
 
@@ -2582,8 +2594,11 @@ public sealed class ApplicationReboundBackoffTrackerTests
         var firstReview = tracker.FamilyStableLearningRecords.Single();
         Assert.Equal(2, firstReview.StableWorkingSetSamplesBytes.Count);
         Assert.Equal(0, firstReview.HistoricalReviewSuccessCount);
-        Assert.Equal(now + TimeSpan.FromMinutes(38), Assert.IsType<NaturalStableReviewSchedule>(
-            tracker.GetNaturalStableReviewSchedule("app", new[] { componentKey }, settings)).NextReviewAt);
+        var sampleSchedule = Assert.IsType<NaturalStableReviewSchedule>(
+            tracker.GetNaturalStableReviewSchedule(
+                "app", new[] { componentKey }, settings, firstReview.LastStableLaunchSignature));
+        Assert.True(sampleSchedule.IsSampleReview);
+        Assert.Equal(2, sampleSchedule.CurrentLaunchSampleCount);
 
         tracker.ObserveNaturalStableStates(
             new[] { Snapshot(202 * mib) }, now + TimeSpan.FromMinutes(35), settings);
@@ -2602,7 +2617,7 @@ public sealed class ApplicationReboundBackoffTrackerTests
         Assert.Equal(0, rolled.HistoricalReviewSuccessCount);
         Assert.Equal(0, rolled.LastStableLaunchSampleCount);
         Assert.DoesNotContain(202 * mib, rolled.StableWorkingSetSamplesBytes);
-        Assert.Equal(now + TimeSpan.FromMinutes(43), rolled.StableLastObservedAt);
+        Assert.Equal(now + TimeSpan.FromMinutes(42), rolled.StableLastObservedAt);
     }
 
     [Fact]
@@ -2620,7 +2635,10 @@ public sealed class ApplicationReboundBackoffTrackerTests
         PrimeNaturalRecovery(tracker, now, componentKey, "launch-1", 200 * mib);
         NaturalStableStateSnapshot Snapshot(long bytes) => new(
             "app", scopeKey, new[] { componentKey }, "launch-1", bytes,
-            IsForeground: false, IsLowActivity: true);
+            IsForeground: false, IsLowActivity: true)
+        {
+            RecoveryOrigin = NaturalStableObservationOrigin.PostTrim
+        };
 
         tracker.ObserveNaturalStableStates(new[] { Snapshot(200 * mib) }, now, settings);
         tracker.ObserveNaturalStableStates(
@@ -2638,10 +2656,8 @@ public sealed class ApplicationReboundBackoffTrackerTests
         tracker.ObserveNaturalStableStates(
             new[] { Snapshot(203 * mib) }, reviewStartedAt + TimeSpan.FromMinutes(1), settings);
 
-        Assert.Contains(componentKey, tracker.NaturalStableReviewComponentKeys());
-        Assert.Contains(componentKey, tracker.NaturalStableProvisionalValidationComponentKeys());
-        Assert.Equal(StableObservationPhase.ProvisionalValidation,
-            Assert.Single(tracker.NaturalStableObservationStatuses()).Phase);
+        Assert.Contains(componentKey, tracker.NaturalStableSampleReviewComponentKeys());
+        Assert.Empty(tracker.NaturalStableProvisionalValidationComponentKeys());
         Assert.Single(Assert.Single(tracker.FamilyStableLearningRecords).StableSamples);
 
         tracker.ObserveNaturalStableStates(
@@ -2649,16 +2665,14 @@ public sealed class ApplicationReboundBackoffTrackerTests
             reviewStartedAt + TimeSpan.FromMinutes(1) + TimeSpan.FromSeconds(3),
             settings);
 
-        Assert.Empty(tracker.NaturalStableReviewComponentKeys());
+        Assert.Contains(componentKey, tracker.NaturalStableSampleReviewComponentKeys());
         Assert.Empty(tracker.NaturalStableProvisionalValidationComponentKeys());
         Assert.Empty(tracker.NaturalStableGrowthReviewComponentKeys());
-        Assert.Equal(ApplicationStableCandidateState.Converged,
-            Assert.Single(tracker.StableCandidateStatuses).State);
-        Assert.Equal(2, Assert.Single(tracker.FamilyStableLearningRecords).StableSamples.Count);
+        Assert.Single(Assert.Single(tracker.FamilyStableLearningRecords).StableSamples);
     }
 
     [Fact]
-    public void ConvergedCurrentLaunchExposesTheNextHistoricalReviewSchedule()
+    public void PendingInitialPlatformDoesNotExposeAHistoricalReviewSchedule()
     {
         const long mib = 1024L * 1024;
         const string componentKey = "app|component:main";
@@ -2679,16 +2693,54 @@ public sealed class ApplicationReboundBackoffTrackerTests
         tracker.ObserveNaturalStableStates(
             new[] { Snapshot(202 * mib) }, now + TimeSpan.FromMinutes(5), settings);
 
-        var schedule = Assert.IsType<NaturalStableReviewSchedule>(
-            tracker.GetNaturalStableReviewSchedule("app", new[] { componentKey }, settings));
-        Assert.Equal(now + TimeSpan.FromMinutes(20), schedule.NextReviewAt);
-        Assert.Equal(0, schedule.CompletedReviewCount);
-        Assert.Equal(3, schedule.InitialReviewTarget);
+        Assert.True(Assert.IsType<NaturalStableReviewSchedule>(tracker.GetNaturalStableReviewSchedule(
+            "app", new[] { componentKey }, settings)).IsSampleReview);
+        Assert.True(Assert.IsType<NaturalStableReviewSchedule>(tracker.GetNaturalStableReviewSchedule(
+            "app", new[] { componentKey }, settings, "launch-2")).IsSampleReview);
+    }
 
-        var nextLaunch = Assert.IsType<NaturalStableReviewSchedule>(
-            tracker.GetNaturalStableReviewSchedule(
-                "app", new[] { componentKey }, settings, "launch-2"));
-        Assert.Equal(0, nextLaunch.CompletedReviewCount);
+    [Fact]
+    public void OrdinaryPostTrimConvergenceWithoutAnAnchorDoesNotExposeAReviewSchedule()
+    {
+        const long mib = 1024L * 1024;
+        const string componentKey = "app|component:main";
+        var scopeKey = ApplicationStableScopeIdentity.For("app", new[] { componentKey });
+        var now = DateTimeOffset.UtcNow;
+        var tracker = new ApplicationReboundBackoffTracker();
+        var settings = StableStateSuppressionSettings.For(OptimizationProfile.Turbo);
+        NaturalStableStateSnapshot Snapshot(long bytes) => new(
+            "app", scopeKey, new[] { componentKey }, "launch-1", bytes,
+            IsForeground: false, IsLowActivity: true)
+        {
+            RecoveryOrigin = NaturalStableObservationOrigin.PostTrim
+        };
+
+        PrimeNaturalRecovery(tracker, now, componentKey, "launch-1", 200 * mib);
+        tracker.ObserveNaturalStableStates(new[] { Snapshot(200 * mib) }, now, settings);
+        tracker.ObserveNaturalStableStates(
+            new[] { Snapshot(202 * mib) }, now + TimeSpan.FromMinutes(2), settings);
+        tracker.ObserveNaturalStableStates(
+            new[] { Snapshot(202 * mib) }, now + TimeSpan.FromMinutes(3), settings);
+        tracker.ObserveNaturalStableStates(
+            new[] { Snapshot(202 * mib) }, now + TimeSpan.FromMinutes(5), settings);
+
+        PrimeNaturalRecovery(
+            tracker, now + TimeSpan.FromMinutes(6), componentKey, "launch-1", 201 * mib);
+        tracker.ObserveNaturalStableStates(
+            new[] { Snapshot(201 * mib) }, now + TimeSpan.FromMinutes(6), settings);
+        tracker.ObserveNaturalStableStates(
+            new[] { Snapshot(203 * mib) }, now + TimeSpan.FromMinutes(8), settings);
+        tracker.ObserveNaturalStableStates(
+            new[] { Snapshot(203 * mib) }, now + TimeSpan.FromMinutes(9), settings);
+        tracker.ObserveNaturalStableStates(
+            new[] { Snapshot(203 * mib) }, now + TimeSpan.FromMinutes(11), settings);
+        tracker.ObserveNaturalStableStates(
+            new[] { Snapshot(203 * mib) }, now + TimeSpan.FromMinutes(12), settings);
+        tracker.ObserveNaturalStableStates(
+            new[] { Snapshot(203 * mib) }, now + TimeSpan.FromMinutes(13), settings);
+
+        Assert.True(Assert.IsType<NaturalStableReviewSchedule>(tracker.GetNaturalStableReviewSchedule(
+            "app", new[] { componentKey }, settings, "launch-1")).IsSampleReview);
     }
 
     [Fact]
@@ -2739,17 +2791,18 @@ public sealed class ApplicationReboundBackoffTrackerTests
         const long mib = 1024L * 1024;
         const string componentKey = "app|component:main";
         var now = DateTimeOffset.UtcNow;
-        var sample = new ApplicationStableSample(
-            200 * mib, now, "launch-1", "cycle-1", 1, PendingHigh: false);
+        var samples = Enumerable.Range(0, 3).Select(index => new ApplicationStableSample(
+            200 * mib, now - TimeSpan.FromMinutes(index), "launch-1", $"cycle-{index}",
+            1, PendingHigh: false)).ToArray();
         var record = new ApplicationStableLearningRecord(
-            "app", new[] { sample.WorkingSetBytes }, now, "launch-1")
+            "app", samples.Select(sample => sample.WorkingSetBytes).ToArray(), now, "launch-1")
         {
             ComponentKeys = new[] { componentKey },
             ModelVersion = StableStateSuppressionPolicy.NaturalStableStateModelVersion,
-            LastStableLaunchSampleCount = 1,
-            StableSamples = new[] { sample },
+            LastStableLaunchSampleCount = 3,
+            StableSamples = samples,
             AnchorGeneration = 1,
-            AnchorGenerationBaselineBytes = sample.WorkingSetBytes,
+            AnchorGenerationBaselineBytes = samples[0].WorkingSetBytes,
             HistoricalReviewSuccessCount = persistedCompletedReviews,
             HistoricalReviewScheduleVersion = 2
         };
@@ -2767,7 +2820,7 @@ public sealed class ApplicationReboundBackoffTrackerTests
     }
 
     [Fact]
-    public void PendingClusterCannotRetainHistoricalReviewProgressAndKeepsFifteenMinuteSchedule()
+    public void PendingClusterCannotRetainHistoricalReviewProgressOrExposeAReviewSchedule()
     {
         const long mib = 1024L * 1024;
         const string componentKey = "app|component:main";
@@ -2800,11 +2853,9 @@ public sealed class ApplicationReboundBackoffTrackerTests
 
         Assert.Equal(0, migrated.HistoricalReviewSuccessCount);
         Assert.Equal(2, migrated.HistoricalReviewScheduleVersion);
-        var schedule = Assert.IsType<NaturalStableReviewSchedule>(tracker.GetNaturalStableReviewSchedule(
+        Assert.True(Assert.IsType<NaturalStableReviewSchedule>(tracker.GetNaturalStableReviewSchedule(
             "app", new[] { componentKey },
-            StableStateSuppressionSettings.For(OptimizationProfile.Turbo)));
-        Assert.Equal(0, schedule.CompletedReviewCount);
-        Assert.Equal(now + TimeSpan.FromMinutes(15), schedule.NextReviewAt);
+            StableStateSuppressionSettings.For(OptimizationProfile.Turbo))).IsSampleReview);
     }
 
     [Fact]
@@ -3016,20 +3067,20 @@ public sealed class ApplicationReboundBackoffTrackerTests
 
         tracker.ObserveNaturalStableStates(
             new[] { Snapshot(205 * mib) }, now + TimeSpan.FromMinutes(20), settings);
-        Assert.Contains(componentKey, tracker.NaturalStableReviewComponentKeys());
+        Assert.Contains(componentKey, tracker.NaturalStableSampleReviewComponentKeys());
         tracker.ObserveNaturalStableStates(
             new[] { Snapshot(400 * mib) }, now + TimeSpan.FromMinutes(21), settings);
-        Assert.Empty(tracker.NaturalStableReviewComponentKeys());
+        Assert.Empty(tracker.NaturalStableSampleReviewComponentKeys());
         Assert.Equal(ApplicationStableCandidateState.Excluded,
             Assert.Single(tracker.StableCandidateStatuses).State);
         Assert.Single(Assert.Single(tracker.FamilyStableLearningRecords).StableSamples);
 
         tracker.ObserveNaturalStableStates(
             new[] { Snapshot(205 * mib) }, now + TimeSpan.FromMinutes(22), settings);
-        Assert.Empty(tracker.NaturalStableReviewComponentKeys());
+        Assert.Empty(tracker.NaturalStableSampleReviewComponentKeys());
         tracker.ObserveNaturalStableStates(
             new[] { Snapshot(205 * mib) }, now + TimeSpan.FromMinutes(26), settings);
-        Assert.Empty(tracker.NaturalStableReviewComponentKeys());
+        Assert.Empty(tracker.NaturalStableSampleReviewComponentKeys());
         Assert.Equal(ApplicationStableCandidateState.Excluded,
             Assert.Single(tracker.StableCandidateStatuses).State);
     }
@@ -3060,15 +3111,15 @@ public sealed class ApplicationReboundBackoffTrackerTests
             new[] { Snapshot(202 * mib) }, now + TimeSpan.FromMinutes(5), settings);
         tracker.ObserveNaturalStableStates(
             new[] { Snapshot(205 * mib) }, now + TimeSpan.FromMinutes(20), settings);
-        Assert.Contains(componentKey, tracker.NaturalStableReviewComponentKeys());
+        Assert.Contains(componentKey, tracker.NaturalStableSampleReviewComponentKeys());
 
         tracker.ObserveNaturalStableStates(
             new[] { Snapshot(205 * mib, foreground: true) },
             now + TimeSpan.FromMinutes(21), settings);
-        Assert.Contains(componentKey, tracker.NaturalStableReviewComponentKeys());
+        Assert.Contains(componentKey, tracker.NaturalStableSampleReviewComponentKeys());
         tracker.ObserveNaturalStableStates(
             new[] { Snapshot(205 * mib) }, now + TimeSpan.FromMinutes(21.1), settings);
-        Assert.Contains(componentKey, tracker.NaturalStableReviewComponentKeys());
+        Assert.Contains(componentKey, tracker.NaturalStableSampleReviewComponentKeys());
     }
 
     [Fact]
@@ -3428,7 +3479,7 @@ public sealed class ApplicationReboundBackoffTrackerTests
     }
 
     [Fact]
-    public void RuntimeStableStateMigratesEquivalentLaunchSignatureWithinItsLimit()
+    public void RuntimeStableStateKeepsPriorSamplesOutsideANewLaunch()
     {
         const long mib = 1024L * 1024;
         const string componentKey = "app|component:main";
@@ -3453,23 +3504,13 @@ public sealed class ApplicationReboundBackoffTrackerTests
         var migratedStatus = Assert.Single(tracker.StableCandidateStatuses);
         Assert.Equal(ApplicationStableCandidateState.Converged, migratedStatus.State);
         Assert.Equal("launch-2", migratedStatus.LaunchSignature);
-        var migratedRecord = Assert.Single(tracker.FamilyStableLearningRecords);
-        Assert.Equal("launch-2", migratedRecord.LastStableLaunchSignature);
-        Assert.Equal(0, migratedRecord.LastStableLaunchSampleCount);
-        Assert.Single(migratedRecord.StableWorkingSetSamplesBytes);
-        Assert.All(migratedRecord.StableSamples,
-            sample => Assert.Equal("launch-2", sample.LaunchSignature));
+        var retainedRecord = Assert.Single(tracker.FamilyStableLearningRecords);
+        Assert.Equal("launch-1", retainedRecord.LastStableLaunchSignature);
+        Assert.Equal(0, retainedRecord.LastStableLaunchSampleCount);
+        Assert.Single(retainedRecord.StableWorkingSetSamplesBytes);
+        Assert.All(retainedRecord.StableSamples,
+            sample => Assert.Equal("launch-1", sample.LaunchSignature));
 
-        tracker.ObserveNaturalStableStates(
-            new[] { Snapshot(210 * mib, "launch-2") }, now + TimeSpan.FromMinutes(20), settings);
-        tracker.ObserveNaturalStableStates(
-            new[] { Snapshot(212 * mib, "launch-2") }, now + TimeSpan.FromMinutes(23), settings);
-        tracker.ObserveNaturalStableStates(
-            new[] { Snapshot(212 * mib, "launch-2") }, now + TimeSpan.FromMinutes(25), settings);
-
-        var secondSample = Assert.Single(tracker.FamilyStableLearningRecords);
-        Assert.Equal(0, secondSample.LastStableLaunchSampleCount);
-        Assert.Equal(2, secondSample.StableWorkingSetSamplesBytes.Count);
     }
 
     [Fact]

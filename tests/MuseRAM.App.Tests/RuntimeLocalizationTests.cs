@@ -278,7 +278,9 @@ public sealed class RuntimeLocalizationTests
         Assert.DoesNotContain("{2}", string.Format(text["SessionUptimeDaysFormat"], 3, 4, 5));
         var stableProgress = string.Format(text["LearningStableSampleProgressFormat"], 2, 3, 4, 9);
         Assert.Contains(language == UiLanguage.ChineseSimplified ? "本次已收集 2/3" : "This launch collected 2/3", stableProgress);
-        Assert.Contains(language == UiLanguage.ChineseSimplified ? "已接受总样本 4/9" : "accepted total 4/9", stableProgress);
+        Assert.Contains(language == UiLanguage.ChineseSimplified ? "样本池 4/9" : "sample pool 4/9", stableProgress);
+        var inactiveStableProgress = string.Format(text["LearningStableSampleInactiveScopeFormat"], 0, 3, 4, 9);
+        Assert.Contains(language == UiLanguage.ChineseSimplified ? "样本池 4/9" : "sample pool 4/9", inactiveStableProgress);
         var stableSamplesHelp = string.Format(
             text["LearningStableSamplesHelpFormat"],
             3, 3, text["LearningStableSamplesRolling"], 8, 9,
