@@ -1376,7 +1376,6 @@
     <DataTemplate x:Key="RetentionStatusIconTemplate">
       <Grid Width="14" Height="14">
         <Path x:Name="ProtectedIcon" Style="{StaticResource LucideIconPathStyle}" Data="{StaticResource IconShield}" Visibility="Collapsed" Stroke="{DynamicResource AccentBrush}" />
-        <Path x:Name="PartiallyProtectedIcon" Style="{StaticResource LucideIconPathStyle}" Data="{StaticResource IconShieldPartial}" Visibility="Collapsed" Stroke="{DynamicResource AccentBrush}" />
         <Path x:Name="StableIcon" Style="{StaticResource LucideIconPathStyle}" Data="{StaticResource IconCircleCheck}" Visibility="Collapsed" Stroke="{DynamicResource SuccessBrush}" />
         <Path x:Name="SessionStableIcon" Style="{StaticResource LucideIconPathStyle}" Data="{StaticResource IconCircleCheck}" Visibility="Collapsed" Stroke="{DynamicResource WarningBrush}" />
         <Path x:Name="ReviewIcon" Style="{StaticResource LucideIconPathStyle}" Data="{StaticResource IconLoaderCircle}" Visibility="Collapsed" Stroke="{DynamicResource MutedBrush}" RenderTransformOrigin="0.5,0.5"><Path.RenderTransform><RotateTransform Angle="{Binding ReviewSpinnerAngle, Source={x:Static local:MotionPolicy.Current}}" /></Path.RenderTransform></Path>
@@ -1393,7 +1392,6 @@
       </Grid>
       <DataTemplate.Triggers>
         <DataTrigger Binding="{Binding RetentionIcon}" Value="{x:Static local:RetentionStatusIcon.Protected}"><Setter TargetName="ProtectedIcon" Property="Visibility" Value="Visible" /></DataTrigger>
-        <DataTrigger Binding="{Binding RetentionIcon}" Value="{x:Static local:RetentionStatusIcon.PartiallyProtected}"><Setter TargetName="PartiallyProtectedIcon" Property="Visibility" Value="Visible" /></DataTrigger>
         <DataTrigger Binding="{Binding RetentionIcon}" Value="{x:Static local:RetentionStatusIcon.Stable}"><Setter TargetName="StableIcon" Property="Visibility" Value="Visible" /></DataTrigger>
         <DataTrigger Binding="{Binding RetentionIcon}" Value="{x:Static local:RetentionStatusIcon.SessionStable}"><Setter TargetName="SessionStableIcon" Property="Visibility" Value="Visible" /></DataTrigger>
         <DataTrigger Binding="{Binding RetentionIcon}" Value="{x:Static local:RetentionStatusIcon.Review}"><Setter TargetName="ReviewIcon" Property="Visibility" Value="Visible" /></DataTrigger>

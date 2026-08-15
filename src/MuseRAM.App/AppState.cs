@@ -128,7 +128,6 @@ public enum ProcessRetentionIndicator
 {
     None,
     EntireFamilyProtection,
-    PartialProtection,
     SessionStableState,
     LongTermStableState,
     NaturalStableObservation,
@@ -137,6 +136,7 @@ public enum ProcessRetentionIndicator
     NaturalStableGrowthReview,
     BenefitObservation,
     BenefitObservationWithHistoricalStable,
+    RuleObservation,
     AutomaticBackoff,
     Foreground,
     IoActivity,
@@ -164,7 +164,8 @@ public static class ProcessRetentionPresentation
         bool naturalStableReview = false,
         bool naturalStableGrowthReview = false,
         bool naturalStableProvisionalValidation = false,
-        bool? reboundObservationPending = null)
+        bool? reboundObservationPending = null,
+        bool ruleObservationPending = false)
     {
         if (isProtected) return ProcessRetentionIndicator.EntireFamilyProtection;
         var lifecycle = ResolveLifecycle(
@@ -177,12 +178,9 @@ public static class ProcessRetentionPresentation
             naturalStableReview,
             naturalStableGrowthReview,
             naturalStableProvisionalValidation,
-            reboundObservationPending);
-        return lifecycle != ProcessRetentionIndicator.None
-            ? lifecycle
-            : isPartiallyProtected
-                ? ProcessRetentionIndicator.PartialProtection
-                : ProcessRetentionIndicator.None;
+            reboundObservationPending,
+            ruleObservationPending);
+        return lifecycle;
     }
 
     public static ProcessRetentionIndicator ResolveLifecycle(
@@ -195,7 +193,8 @@ public static class ProcessRetentionPresentation
         bool naturalStableReview = false,
         bool naturalStableGrowthReview = false,
         bool naturalStableProvisionalValidation = false,
-        bool? reboundObservationPending = null)
+        bool? reboundObservationPending = null,
+        bool ruleObservationPending = false)
     {
         if (naturalStableGrowthReview) return ProcessRetentionIndicator.NaturalStableGrowthReview;
         if (reboundObservationPending ??
@@ -209,6 +208,7 @@ public static class ProcessRetentionPresentation
         if (hasLongTermStableReference)
             return ProcessRetentionIndicator.LongTermStableState;
         if (naturalStableProvisionalValidation) return ProcessRetentionIndicator.SessionStableState;
+        if (ruleObservationPending) return ProcessRetentionIndicator.RuleObservation;
         if (exclusionReasons is null) return ProcessRetentionIndicator.None;
         if (exclusionReasons.Contains(CandidateExclusionReason.StableStateSuppression))
             return hasLongTermStableReference
@@ -246,7 +246,6 @@ public enum RetentionStatusIcon
 {
     None,
     Protected,
-    PartiallyProtected,
     Stable,
     SessionStable,
     Review,

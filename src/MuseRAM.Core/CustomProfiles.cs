@@ -696,7 +696,8 @@ public sealed class ApplicationReboundBackoffTracker
                 AwaitingNewRecoveryCycle: false)
             {
                 IsSampleReview = true,
-                CurrentLaunchSampleCount = currentLaunchSampleCount
+                CurrentLaunchSampleCount = currentLaunchSampleCount,
+                CurrentStableClusterSampleCount = StableAnchorLearningPolicy.LargestInitialClusterCount(record)
             };
         }
         var completedReviews = currentLaunchSignature is not null &&
@@ -1052,6 +1053,12 @@ public sealed class ApplicationReboundBackoffTracker
             .Where(pair => now - pair.Value.StartedAt < pair.Value.Settings.LateWindow)
             .Select(pair => pair.Key)
             .ToHashSet(StringComparer.OrdinalIgnoreCase);
+    public IReadOnlySet<string> PendingApplicationRuleObservationComponentKeys(DateTimeOffset now) =>
+        _pending
+            .Where(pair => now - pair.Value.StartedAt < pair.Value.Settings.LateWindow &&
+                           pair.Value.IsApplicationRuleScoped)
+            .Select(pair => pair.Key)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
     public IReadOnlySet<string> PendingGlobalReclaimObservationComponentKeys(DateTimeOffset now) =>
         _pending
             .Where(pair => now - pair.Value.StartedAt < pair.Value.Settings.LateWindow &&
@@ -1230,7 +1237,8 @@ public sealed class ApplicationReboundBackoffTracker
         OptimizationRunContext? runContext = null,
         IReadOnlyCollection<int>? baselineFamilyProcessIds = null,
         string? launchSignature = null,
-        NaturalStableObservationOrigin recoveryOrigin = NaturalStableObservationOrigin.PostTrim)
+        NaturalStableObservationOrigin recoveryOrigin = NaturalStableObservationOrigin.PostTrim,
+        bool isApplicationRuleScoped = false)
     {
         var released = Math.Max(0, workingSetBefore - workingSetAfter);
         if (string.IsNullOrWhiteSpace(familyKey) ||
@@ -1286,7 +1294,8 @@ public sealed class ApplicationReboundBackoffTracker
             recoveryAttempt,
             runContext,
             launchSignature,
-            recoveryOrigin));
+            recoveryOrigin,
+            isApplicationRuleScoped));
     }
 
     public void Observe(
@@ -3578,7 +3587,8 @@ public sealed class ApplicationReboundBackoffTracker
         bool RecoveryAttempt,
         OptimizationRunContext? RunContext,
         string? LaunchSignature,
-        NaturalStableObservationOrigin RecoveryOrigin);
+        NaturalStableObservationOrigin RecoveryOrigin,
+        bool IsApplicationRuleScoped);
 
     private sealed record BackoffState(
         string FamilyKey,

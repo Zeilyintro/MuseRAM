@@ -590,6 +590,7 @@ public sealed record NaturalStableReviewSchedule(
 {
     public bool IsSampleReview { get; init; }
     public int CurrentLaunchSampleCount { get; init; }
+    public int CurrentStableClusterSampleCount { get; init; }
 }
 
 public sealed record HistoricalReviewSessionProgress(
@@ -1053,6 +1054,26 @@ public static class StableAnchorLearningPolicy
             }
         }
         return best;
+    }
+
+    public static int LargestInitialClusterCount(ApplicationStableLearningRecord record)
+    {
+        var samples = NormalizeSamples(record)
+            .Where(sample => !sample.PendingHigh)
+            .OrderBy(sample => sample.WorkingSetBytes)
+            .ToArray();
+        var largest = 0;
+        for (var start = 0; start < samples.Length; start++)
+        {
+            for (var end = start; end < samples.Length; end++)
+            {
+                if (!IsWithinAnchorBand(
+                        samples[start].WorkingSetBytes,
+                        samples[end].WorkingSetBytes)) break;
+                largest = Math.Max(largest, end - start + 1);
+            }
+        }
+        return largest;
     }
 
     private static ApplicationStableSample[] TrimSamples(

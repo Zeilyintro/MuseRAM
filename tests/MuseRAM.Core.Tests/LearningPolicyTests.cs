@@ -47,6 +47,36 @@ public sealed class ComponentBackoffTests
     }
 
     [Fact]
+    public void RuleScopedObservationRemainsPendingButDoesNotEnterBenefitLearning()
+    {
+        var tracker = new ApplicationReboundBackoffTracker();
+        var now = DateTimeOffset.UtcNow;
+        var componentKey = ApplicationComponentIdentity.ForExecutable(FamilyKey, MainPath);
+        tracker.BeginComponent(
+            FamilyKey,
+            componentKey,
+            MainPath,
+            500,
+            100,
+            ReboundBackoffSettings.Default,
+            now,
+            learnOutcome: false,
+            targetProcessIds: new[] { 1 },
+            isApplicationRuleScoped: true);
+
+        Assert.Contains(componentKey, tracker.PendingObservationComponentKeys(now));
+        Assert.Contains(componentKey, tracker.PendingApplicationRuleObservationComponentKeys(now));
+
+        tracker.Observe(Array.Empty<ProcessFamilySnapshot>(), now + ReboundBackoffSettings.Default.LateWindow);
+
+        Assert.Empty(tracker.LearningRecords);
+        Assert.Empty(tracker.NaturalStableScopeRequests(
+            now + ReboundBackoffSettings.Default.LateWindow));
+        Assert.Empty(tracker.PendingApplicationRuleObservationComponentKeys(
+            now + ReboundBackoffSettings.Default.LateWindow));
+    }
+
+    [Fact]
     public void ReplacementPidCountsOnlyWhenItsExecutablePathMatchesTheComponent()
     {
         var now = DateTimeOffset.UtcNow;

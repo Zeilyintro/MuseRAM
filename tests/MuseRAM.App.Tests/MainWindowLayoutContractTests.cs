@@ -1956,7 +1956,10 @@ public sealed class MainWindowLayoutContractTests
         Assert.True(sharedSafetyCheck > scheduledDue && sharedSafetyCheck < scheduledBranch);
         Assert.Contains("AutomaticOptimizationSafetyWindow.ShouldStart(manual, scheduled)", code);
         Assert.Contains("enforceUnattendedSafety: scheduled", code);
-        Assert.Contains("learnOutcome: applicationRule is null", code);
+        Assert.Contains("followAutomaticRuleOverrides", code);
+        Assert.Contains("isApplicationRuleScoped", code);
+        Assert.Contains("learnOutcome: !isApplicationRuleScoped", code);
+        Assert.Contains("isApplicationRuleScoped: isApplicationRuleScoped", code);
         Assert.DoesNotContain("_settings.AutoOptimization && _settings.ScheduledOptimizationEnabled", code);
     }
 
@@ -2495,21 +2498,23 @@ public sealed class MainWindowLayoutContractTests
     }
 
     [Fact]
-    public void RetentionStatusIconsDistinguishPartialProtectionAndObservation()
+    public void RetentionStatusIconsKeepPartialProtectionBesideTheNameAndDistinguishObservations()
     {
         var layout = File.ReadAllText(FixturePath());
         var resources = File.ReadAllText(IconResourcesFixturePath());
         var code = File.ReadAllText(CodeFixturePath());
 
-        Assert.Contains("ProcessRetentionIndicator.PartialProtection => RetentionStatusIcon.PartiallyProtected", code);
-        Assert.Contains("RetentionStatusIcon.PartiallyProtected", layout);
         Assert.Contains("IconShieldPartial", resources);
+        Assert.Contains("HasPartialProtectionBadge", layout);
+        Assert.DoesNotContain("RetentionStatusIcon.PartiallyProtected", layout);
+        Assert.DoesNotContain("ProcessRetentionIndicator.PartialProtection", code);
         Assert.Contains("ProcessRetentionIndicator.BenefitObservationWithHistoricalStable => RetentionStatusIcon.Observing", code);
         Assert.Contains("RetentionStatusIcon.Observing", layout);
         Assert.Contains("x:Name=\"ActivityObservingIcon\"", layout);
         Assert.Contains("RetentionStatusIcon.ActivityObserving", layout);
+        Assert.Contains("ProcessRetentionIndicator.RuleObservation => RetentionStatusIcon.ActivityObserving", code);
+        Assert.Contains("ProcessStatusRuleObservation", code);
         Assert.Contains("string.Equals(row.IdleStatus, T(\"ActivityMinimized\"), StringComparison.Ordinal)", code);
-        Assert.Contains("ProcessRetentionIndicator.PartialProtection", code);
         Assert.Contains("row = row with { RetentionIcon = RetentionStatusIcon.ActivityObserving };", code);
         Assert.Contains("IconEye", resources);
         Assert.Contains("ProcessRetentionIndicator.AutomaticBackoff => RetentionStatusIcon.Backoff", code);
@@ -2530,7 +2535,9 @@ public sealed class MainWindowLayoutContractTests
         Assert.Contains("ProcessRetentionPresentation.Resolve(", method);
         Assert.Contains("FormatRetentionIndicator", method);
         Assert.DoesNotContain("DateTimeOffset.Now", method);
-        Assert.Contains("PendingObservationComponentKeys(now)", method);
+        Assert.Contains("ResolvePendingObservationKinds(componentKeys, now)", method);
+        Assert.Contains("PendingApplicationRuleObservationComponentKeys(now)", code);
+        Assert.Contains("ruleObservationPending: pendingObservations.ApplicationRule", method);
         Assert.Contains("evaluation.ExclusionReasons", method);
         Assert.Contains("isEligible: evaluation.IsEligible", method);
         Assert.Contains("hasProcessableTargets: evaluation.TargetProcessCount > 0", method);
@@ -3497,7 +3504,7 @@ public sealed class MainWindowLayoutContractTests
     {
         var project = XDocument.Load(ProjectFixturePath());
 
-        Assert.Equal("0.1.7.7", project.Descendants("Version").Single().Value);
+        Assert.Equal("0.1.7.8", project.Descendants("Version").Single().Value);
     }
 
     [Fact]

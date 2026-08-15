@@ -725,6 +725,23 @@ public sealed class InfrastructureTests
             ProcessRetentionIndicator.SessionStableState,
             ProcessRetentionPresentation.Resolve(false, true, stableReasons));
         Assert.Equal(
+            ProcessRetentionIndicator.None,
+            ProcessRetentionPresentation.Resolve(false, true, Array.Empty<CandidateExclusionReason>()));
+        Assert.Equal(
+            ProcessRetentionIndicator.RuleObservation,
+            ProcessRetentionPresentation.Resolve(
+                false, false, Array.Empty<CandidateExclusionReason>(), ruleObservationPending: true));
+        Assert.Equal(
+            ProcessRetentionIndicator.BenefitObservation,
+            ProcessRetentionPresentation.Resolve(
+                false, false, Array.Empty<CandidateExclusionReason>(),
+                reboundObservationPending: true, ruleObservationPending: true));
+        Assert.Equal(
+            ProcessRetentionIndicator.NaturalStableObservation,
+            ProcessRetentionPresentation.Resolve(
+                false, false, Array.Empty<CandidateExclusionReason>(),
+                naturalStableObservation: true, ruleObservationPending: true));
+        Assert.Equal(
             ProcessRetentionIndicator.NaturalStableGrowthReview,
             ProcessRetentionPresentation.Resolve(
                 false,

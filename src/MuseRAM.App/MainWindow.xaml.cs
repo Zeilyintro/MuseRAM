@@ -824,10 +824,9 @@ public partial class MainWindow : Window
                 stableSettings,
                 StableStateSuppressionPolicy.CurrentNaturalStableLaunchSignature(
                     originalFamily, stableComponentKeys));
-        var pendingBenefitObservation = componentKeys.Any(
-            _applicationBackoffTracker.PendingObservationComponentKeys(now).Contains);
-        var pendingGlobalReclaimObservation = componentKeys.Any(
-            _applicationBackoffTracker.PendingGlobalReclaimObservationComponentKeys(now).Contains);
+        var pendingObservations = ResolvePendingObservationKinds(componentKeys, now);
+        var pendingBenefitObservation = pendingObservations.Benefit;
+        var pendingGlobalReclaimObservation = pendingObservations.GlobalReclaim;
         var naturalStableSampleReview = !pendingBenefitObservation && stableComponentKeys.Any(
             _applicationBackoffTracker.NaturalStableSampleReviewComponentKeys().Contains);
         var indicator = ProcessRetentionPresentation.Resolve(
@@ -847,7 +846,8 @@ public partial class MainWindow : Window
                 _applicationBackoffTracker.NaturalStableGrowthReviewComponentKeys().Contains),
             naturalStableProvisionalValidation: !pendingBenefitObservation && stableComponentKeys.Any(
                 _applicationBackoffTracker.NaturalStableProvisionalValidationComponentKeys().Contains),
-            reboundObservationPending: pendingBenefitObservation);
+            reboundObservationPending: pendingBenefitObservation,
+            ruleObservationPending: pendingObservations.ApplicationRule);
         var (status, detail) = FormatRetentionIndicator(
             indicator, family, stableComponentKeys, statuses, now, reviewSchedule,
             pendingGlobalReclaimObservation, hasLongTermStableReference);
@@ -917,8 +917,6 @@ public partial class MainWindow : Window
             IdleScore = targetFamily.IdleScore.ToString("0.0", CultureInfo.CurrentCulture),
             IdleScoreDetail = TF("IdleScoreDetailFormat", targetFamily.IdleScore, targetFamily.Processes.Count)
         };
-        if (row.RetentionIcon == RetentionStatusIcon.PartiallyProtected)
-            row = row with { RetentionIcon = RetentionStatusIcon.None };
         if (row.RetentionIcon == RetentionStatusIcon.None &&
             (string.Equals(row.IdleStatus, T("ActivityObserving"), StringComparison.Ordinal) ||
              string.Equals(row.IdleStatus, T("ActivityMinimized"), StringComparison.Ordinal)))
@@ -967,6 +965,19 @@ public partial class MainWindow : Window
             _ => T("NoBackoff")
         };
 
+    private (bool Benefit, bool ApplicationRule, bool GlobalReclaim) ResolvePendingObservationKinds(
+        IEnumerable<string> componentKeys,
+        DateTimeOffset now)
+    {
+        var keys = componentKeys.ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var pending = _applicationBackoffTracker.PendingObservationComponentKeys(now);
+        var applicationRule = _applicationBackoffTracker.PendingApplicationRuleObservationComponentKeys(now);
+        return (
+            keys.Any(key => pending.Contains(key) && !applicationRule.Contains(key)),
+            keys.Any(applicationRule.Contains),
+            keys.Any(_applicationBackoffTracker.PendingGlobalReclaimObservationComponentKeys(now).Contains));
+    }
+
     private (string Status, string? Detail) FormatRetentionIndicator(
         ProcessRetentionIndicator indicator,
         ProcessFamilySnapshot decisionFamily,
@@ -999,8 +1010,6 @@ public partial class MainWindow : Window
         {
             ProcessRetentionIndicator.EntireFamilyProtection =>
                 (T("ProtectionActive"), T("ProtectedStateHelp")),
-            ProcessRetentionIndicator.PartialProtection =>
-                (T("ProtectionPartial"), T("ProtectedStateHelp")),
             ProcessRetentionIndicator.SessionStableState =>
                 (T("ProcessStatusSessionStable"),
                     observation is { Phase: StableObservationPhase.ProvisionalValidation,
@@ -1072,6 +1081,10 @@ public partial class MainWindow : Window
             ProcessRetentionIndicator.BenefitObservationWithHistoricalStable =>
                 (T("ProcessStatusBenefitObservation"),
                     TF("ProcessStatusBenefitObservationWithHistoricalStableHelp",
+                        FormatPendingBenefitObservationRemaining(componentKeySet, now))),
+            ProcessRetentionIndicator.RuleObservation =>
+                (T("ProcessStatusRuleObservation"),
+                    TF("ProcessStatusRuleObservationHelp",
                         FormatPendingBenefitObservationRemaining(componentKeySet, now))),
             ProcessRetentionIndicator.AutomaticBackoff =>
                 (T("ProcessStatusBackoff"), T("AutoOptimizationStatusHelp")),
@@ -1169,7 +1182,7 @@ public partial class MainWindow : Window
             now >= schedule.NextReviewAt
                 ? "ProcessStatusSampleReviewDueDetailFormat"
                 : "ProcessStatusSampleReviewScheduleDetailFormat",
-            Math.Clamp(schedule.CurrentLaunchSampleCount, 0, Math.Max(0, schedule.InitialReviewTarget)),
+            Math.Clamp(schedule.CurrentStableClusterSampleCount, 0, Math.Max(0, schedule.InitialReviewTarget)),
             FormatRemaining(schedule.NextReviewAt - now),
             Math.Max(0, schedule.InitialReviewTarget));
 
@@ -1311,10 +1324,9 @@ public partial class MainWindow : Window
         var stableComponentKeys = activeStableRecord is { ComponentKeys.Count: > 0 }
             ? activeStableRecord.ComponentKeys
             : componentKeys;
-        var pendingBenefitObservation = componentKeys.Any(
-            _applicationBackoffTracker.PendingObservationComponentKeys(observedAt).Contains);
-        var pendingGlobalReclaimObservation = componentKeys.Any(
-            _applicationBackoffTracker.PendingGlobalReclaimObservationComponentKeys(observedAt).Contains);
+        var pendingObservations = ResolvePendingObservationKinds(componentKeys, observedAt);
+        var pendingBenefitObservation = pendingObservations.Benefit;
+        var pendingGlobalReclaimObservation = pendingObservations.GlobalReclaim;
         var naturalStableObservation = !pendingBenefitObservation && stableComponentKeys.Any(
             _applicationBackoffTracker.NaturalStableObservationComponentKeys().Contains);
         var naturalStableSampleReview = !pendingBenefitObservation && stableComponentKeys.Any(
@@ -1337,7 +1349,8 @@ public partial class MainWindow : Window
             naturalStableReview,
             naturalStableGrowthReview,
             naturalStableProvisionalValidation,
-            reboundObservationPending: pendingBenefitObservation);
+            reboundObservationPending: pendingBenefitObservation,
+            ruleObservationPending: pendingObservations.ApplicationRule);
         var reviewSchedule = stableSettings is null
             ? null
             : _applicationBackoffTracker.GetNaturalStableReviewSchedule(
@@ -1364,7 +1377,8 @@ public partial class MainWindow : Window
                 naturalStableReview,
                 naturalStableGrowthReview,
                 naturalStableProvisionalValidation,
-                reboundObservationPending: pendingBenefitObservation);
+                reboundObservationPending: pendingBenefitObservation,
+                ruleObservationPending: pendingObservations.ApplicationRule);
         }
         var (protectedText, protectionDetail) = FormatRetentionIndicator(
             retentionIndicator, activityFamily, stableComponentKeys, observationStatuses, observedAt,
@@ -1384,8 +1398,7 @@ public partial class MainWindow : Window
         var minimumWorkingSetBytes = settings?.MinimumFamilyWorkingSetBytes ?? 0;
         var idleStatus = FormatIdleStatus(activityFamily, activity);
         if (!string.Equals(idleStatus, activity, StringComparison.Ordinal) &&
-            retentionIndicator is ProcessRetentionIndicator.None or
-                ProcessRetentionIndicator.PartialProtection)
+            retentionIndicator is ProcessRetentionIndicator.None)
         {
             retentionIcon = RetentionStatusIcon.Idle;
         }
@@ -1430,7 +1443,6 @@ public partial class MainWindow : Window
     private static RetentionStatusIcon RetentionIconFor(ProcessRetentionIndicator indicator) => indicator switch
     {
         ProcessRetentionIndicator.EntireFamilyProtection => RetentionStatusIcon.Protected,
-        ProcessRetentionIndicator.PartialProtection => RetentionStatusIcon.PartiallyProtected,
         ProcessRetentionIndicator.SessionStableState => RetentionStatusIcon.SessionStable,
         ProcessRetentionIndicator.LongTermStableState => RetentionStatusIcon.Stable,
         ProcessRetentionIndicator.NaturalStableSampleReview => RetentionStatusIcon.Review,
@@ -1442,6 +1454,7 @@ public partial class MainWindow : Window
         ProcessRetentionIndicator.NaturalStableObservation => RetentionStatusIcon.StableObserving,
         ProcessRetentionIndicator.BenefitObservation or
             ProcessRetentionIndicator.BenefitObservationWithHistoricalStable => RetentionStatusIcon.Observing,
+        ProcessRetentionIndicator.RuleObservation => RetentionStatusIcon.ActivityObserving,
         ProcessRetentionIndicator.Sampling or ProcessRetentionIndicator.Cooldown or
             ProcessRetentionIndicator.VisibleWindowWait =>
             RetentionStatusIcon.Waiting,
@@ -3376,6 +3389,21 @@ public partial class MainWindow : Window
                 longIdle,
                 applicationRule is not null,
                 runId);
+            var followAutomaticRuleOverrides = applicationRule is null &&
+                                               !manual &&
+                                               !scheduled &&
+                                               !longIdle
+                ? ApplicationOptimizationRulePolicy.CreateAutomaticThresholdOverrides(
+                    ApplicationOptimizationRuleSettings.Resolve(_settings),
+                    _families,
+                    _settings.AutoOptimization)
+                : Array.Empty<AutomaticOptimizationThresholdOverride>();
+            var followAutomaticRuleProcessIds = followAutomaticRuleOverrides
+                .GroupBy(item => item.FamilyKey, StringComparer.OrdinalIgnoreCase)
+                .ToDictionary(
+                    group => group.Key,
+                    group => group.SelectMany(item => item.ProcessIds).ToHashSet(),
+                    StringComparer.OrdinalIgnoreCase);
             var plan = applicationRule is not null
                 ? CreateApplicationRulePlan(applicationRule, planningSettings, planNow)
                 : _planner.CreatePlan(
@@ -3399,12 +3427,7 @@ public partial class MainWindow : Window
                     automaticBackoffComponents: learningFilters.BlockedComponents,
                     pendingReboundObservationComponents: learningFilters.PendingComponents,
                     stableSuppressedComponents: learningFilters.StableComponents,
-                    automaticThresholdOverrides: !manual && !scheduled && !longIdle
-                        ? ApplicationOptimizationRulePolicy.CreateAutomaticThresholdOverrides(
-                            ApplicationOptimizationRuleSettings.Resolve(_settings),
-                            _families,
-                            _settings.AutoOptimization)
-                        : null);
+                    automaticThresholdOverrides: followAutomaticRuleOverrides);
             if (longIdle)
             {
                 var minimumIdle = TimeSpan.FromMinutes(
@@ -3677,6 +3700,11 @@ public partial class MainWindow : Window
                     SynchronizeReboundRunHistory(DateTimeOffset.Now);
                     foreach (var component in componentResults.Values)
                     {
+                        var isApplicationRuleScoped = applicationRule is not null ||
+                                                      followAutomaticRuleProcessIds.TryGetValue(
+                                                          candidate.Family.Key,
+                                                          out var ruleProcessIds) &&
+                                                      component.ProcessIds.Any(ruleProcessIds.Contains);
                         _applicationBackoffTracker.BeginComponent(
                             candidate.Family.Key,
                             component.ComponentKey,
@@ -3685,7 +3713,7 @@ public partial class MainWindow : Window
                             component.WorkingSetAfterBytes,
                             reboundSettings,
                             DateTimeOffset.Now,
-                            learnOutcome: applicationRule is null &&
+                            learnOutcome: !isApplicationRuleScoped &&
                                           (!manual || scheduled) &&
                                           settings.IntelligentCandidateSelection,
                             wasForegroundBeforeTrim: candidate.TargetProcesses.Any(process =>
@@ -3697,7 +3725,8 @@ public partial class MainWindow : Window
                                 .ToArray(),
                             launchSignature: component.ProcessStartTimes.Count == 0
                                 ? null
-                                : string.Join(',', component.ProcessStartTimes.OrderBy(value => value)));
+                                : string.Join(',', component.ProcessStartTimes.OrderBy(value => value)),
+                            isApplicationRuleScoped: isApplicationRuleScoped);
                     }
                 }
             }
@@ -9116,6 +9145,11 @@ public partial class MainWindow : Window
                 var pendingClusterSampleCount = normalizedStableSamples.Count(sample =>
                     sample.Generation <= 0 && !sample.PendingHigh);
                 var pendingHighSampleCount = normalizedStableSamples.Count(sample => sample.PendingHigh);
+                var hasFormalStableAnchor = displayedStableRecord is { AnchorGeneration: > 0, AnchorGenerationBaselineBytes: > 0 } &&
+                                            acceptedStableSampleCount > 0;
+                var largestPendingStableClusterCount = hasFormalStableAnchor || displayedStableRecord is null
+                    ? 0
+                    : StableAnchorLearningPolicy.LargestInitialClusterCount(displayedStableRecord);
                 var currentLaunchStableSampleCount = displayedStableRecord is not null &&
                                                      stableSnapshotsByScope.TryGetValue(
                                                          ApplicationStableScopeIdentity.For(displayedStableRecord),
@@ -9136,6 +9170,16 @@ public partial class MainWindow : Window
                 var benefitSampleLastUpdated = lastObserved.ToString("g", CultureInfo.CurrentCulture);
                 var stableSamplesHelp = stableSettings is null
                     ? TF("LearningStableSamplesHelpDisabledFormat", benefitSampleLastUpdated)
+                    : !hasFormalStableAnchor
+                    ? TF(
+                        "LearningStableSamplesPendingHelpFormat",
+                        stableSampleCount,
+                        stableSamplePool,
+                        largestPendingStableClusterCount,
+                        stableSamplesPerLaunch,
+                        stableSampleIntervalMinutes,
+                        stableSampleLastUpdated,
+                        pendingHighSampleCount)
                     : TF(
                         "LearningStableSamplesHelpFormat",
                         currentLaunchStableSampleCount,
@@ -9326,6 +9370,13 @@ public partial class MainWindow : Window
                         records.Max(record => record.DistinctLaunchCount)),
                     StableSamples = stableSettings is null
                         ? T("LearningStableSamplesDisabled")
+                        : !hasFormalStableAnchor
+                            ? TF(
+                                "LearningStableSamplePendingPlatformFormat",
+                                stableSampleCount,
+                                stableSamplePool,
+                                largestPendingStableClusterCount,
+                                stableSamplesPerLaunch) + historicalStableScopeSuffix
                         : displayedStableRecord is not null && !currentStableScopeMatched
                             ? TF(
                                 "LearningStableSampleInactiveScopeFormat",

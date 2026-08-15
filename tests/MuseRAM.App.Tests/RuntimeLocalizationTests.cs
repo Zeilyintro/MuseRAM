@@ -201,6 +201,7 @@ public sealed class RuntimeLocalizationTests
             "ProcessStatusBenefitObservation", "ProcessStatusBenefitObservationHelp",
             "ProcessStatusBenefitObservationWithHistoricalStable",
             "ProcessStatusBenefitObservationWithHistoricalStableHelp",
+            "ProcessStatusRuleObservation", "ProcessStatusRuleObservationHelp",
             "ProcessStatusForeground", "ProcessStatusForegroundHelp", "ProcessStatusIoActivity",
             "ProcessStatusCpuActivity", "ProcessStatusActivityHelp", "ProcessStatusSampling",
             "ProcessStatusSamplingHelp", "ProcessStatusCooldown", "ProcessStatusCooldownHelp",
