@@ -90,6 +90,7 @@ public partial class MainWindow : Window
         Array.Empty<ProtectionSuggestion>();
     private UpdateAsset? _availableUpdate;
     private bool _updateCheckInProgress;
+    private bool _automaticUpdateRetryScheduled;
     private bool _protectionSuggestionShimmerActive;
     private IReadOnlyDictionary<string, BackgroundActivity> _activity =
         new Dictionary<string, BackgroundActivity>();
@@ -862,7 +863,7 @@ public partial class MainWindow : Window
     {
         if (unprotectedFamily is null || record is null || settings is null ||
             record.ComponentKeys.Count == 0 ||
-            StableStateSuppressionPolicy.SuppressionLimitBytes(record, settings, now) is not { } limit)
+            StableStateSuppressionPolicy.TryGetSuppressionLimit(record, settings, now) is not { } limit)
             return false;
 
         var components = ApplicationComponentIdentity.GroupProcesses(unprotectedFamily);
@@ -7385,7 +7386,7 @@ public partial class MainWindow : Window
         var elapsed = (int)Math.Clamp(
             (now - run.StartedAt).TotalSeconds,
             0,
-            ApplicationReboundDetailTracker.TrackingDuration.TotalSeconds);
+            ReboundObservationPolicy.TrackingDuration.TotalSeconds);
         ReboundAnalysisSummaryText.Text = run.State switch
         {
             ReboundObservationState.Observing => TF(
@@ -7394,8 +7395,8 @@ public partial class MainWindow : Window
                 ReboundKindText(run.Kind),
                 run.StartedAt,
                 elapsed,
-                (int)ApplicationReboundDetailTracker.TrackingDuration.TotalSeconds,
-                run.StartedAt + ApplicationReboundDetailTracker.TrackingDuration),
+                (int)ReboundObservationPolicy.TrackingDuration.TotalSeconds,
+                run.StartedAt + ReboundObservationPolicy.TrackingDuration),
             ReboundObservationState.Replaced => TF(
                 "ReboundRunReplacedSummaryFormat",
                 run.Sequence,
@@ -7407,7 +7408,7 @@ public partial class MainWindow : Window
                 run.Sequence,
                 ReboundKindText(run.Kind),
                 run.StartedAt,
-                run.FinishedAt ?? run.StartedAt + ApplicationReboundDetailTracker.TrackingDuration)
+                run.FinishedAt ?? run.StartedAt + ReboundObservationPolicy.TrackingDuration)
         };
         SynchronizeCollection(_state.ReboundDetails, run.Details.Select(detail =>
             new ApplicationReboundDetailRow(
@@ -7653,7 +7654,7 @@ public partial class MainWindow : Window
             var elapsed = (int)Math.Clamp(
                 (now - run.StartedAt).TotalSeconds,
                 0,
-                ApplicationReboundDetailTracker.TrackingDuration.TotalSeconds);
+                ReboundObservationPolicy.TrackingDuration.TotalSeconds);
             summary.Text = run.State switch
             {
                 ReboundObservationState.Observing => TF(
@@ -7662,8 +7663,8 @@ public partial class MainWindow : Window
                     KindText(run.Kind),
                     run.StartedAt,
                     elapsed,
-                    (int)ApplicationReboundDetailTracker.TrackingDuration.TotalSeconds,
-                    run.StartedAt + ApplicationReboundDetailTracker.TrackingDuration),
+                    (int)ReboundObservationPolicy.TrackingDuration.TotalSeconds,
+                    run.StartedAt + ReboundObservationPolicy.TrackingDuration),
                 ReboundObservationState.Replaced => TF(
                     "ReboundRunReplacedSummaryFormat",
                     run.Sequence,
@@ -7675,7 +7676,7 @@ public partial class MainWindow : Window
                     run.Sequence,
                     KindText(run.Kind),
                     run.StartedAt,
-                    run.FinishedAt ?? run.StartedAt + ApplicationReboundDetailTracker.TrackingDuration)
+                    run.FinishedAt ?? run.StartedAt + ReboundObservationPolicy.TrackingDuration)
             };
             SynchronizeCollection(rows, run.Details.Select(detail =>
                 new ApplicationReboundDetailRow(
@@ -8932,7 +8933,7 @@ public partial class MainWindow : Window
         if (fixedMode && _stableAnchorValueChanged &&
             _settings.ResolveStableStateSuppressionSettings() is { } suppressionSettings)
         {
-            var newLimit = StableStateSuppressionPolicy.SuppressionLimitBytes(fixedBytes, suppressionSettings);
+            var newLimit = StableStateSuppressionPolicy.CalculateSuppressionLimit(fixedBytes, suppressionSettings);
             if (currentRow.CurrentWorkingSetBytes > newLimit &&
                 ShowThemedMessage(
                     T("StableAnchorLowerLimitConfirmTitle"),
@@ -9102,7 +9103,7 @@ public partial class MainWindow : Window
                     : familyReference;
                 long? calculatedStableLimit = stableSettings is null || !effectiveAnchor.HasValue
                     ? null
-                    : StableStateSuppressionPolicy.SuppressionLimitBytes(
+                    : StableStateSuppressionPolicy.CalculateSuppressionLimit(
                         effectiveAnchor.Value,
                         stableSettings);
                 var stableLimits = calculatedStableLimit.HasValue
@@ -9887,6 +9888,10 @@ public partial class MainWindow : Window
 
     private async Task RunStartupUpdateMaintenanceAsync()
     {
+        _diagnosticLog.Info(
+            $"Startup update maintenance queued. Hidden={_startHidden}, Visible={IsVisible}, " +
+            $"Frequency={_settings.UpdateCheckFrequency}, " +
+            $"LastCheckUtc={_settings.LastAutomaticUpdateCheckUtc?.ToString("O") ?? "<none>"}.");
         try
         {
             var directory = UpdateStorage.Resolve(_settings.UpdateDirectory);
@@ -9903,10 +9908,24 @@ public partial class MainWindow : Window
             _diagnosticLog.Warning("Unable to clean expired update files.", exception);
         }
 
-        if (!UpdateCheckPolicy.IsDue(_settings.UpdateCheckFrequency,
-                _settings.LastAutomaticUpdateCheckUtc, DateTimeOffset.UtcNow)) return;
+        var updateDue = UpdateCheckPolicy.IsDue(
+            _settings.UpdateCheckFrequency,
+            _settings.LastAutomaticUpdateCheckUtc,
+            DateTimeOffset.UtcNow);
+        _diagnosticLog.Info($"Startup update due evaluation: Due={updateDue}.");
+        if (!updateDue)
+        {
+            _diagnosticLog.Info("Startup update check skipped because the configured frequency is not due.");
+            return;
+        }
         await Task.Delay(TimeSpan.FromSeconds(10));
-        if (!_exitRequested) await CheckForUpdatesAsync(manual: false);
+        if (_exitRequested)
+        {
+            _diagnosticLog.Info("Startup update check skipped because application exit was requested.");
+            return;
+        }
+        _diagnosticLog.Info("Startup update check starting after the initial delay.");
+        await CheckForUpdatesAsync(manual: false);
     }
 
     private async Task CheckForUpdatesAsync(bool manual)
@@ -9922,8 +9941,11 @@ public partial class MainWindow : Window
         if (manual) SetBusyState(true);
         try
         {
-            using var httpClient = new HttpClient { Timeout = TimeSpan.FromSeconds(15) };
+            using var httpClient = new HttpClient { Timeout = UpdateConfiguration.FeedResponseTimeout };
             var result = await new UpdateFeedClient(httpClient).CheckAsync(feedUri, AppVersion.Current);
+            _diagnosticLog.Info(
+                $"Update check completed. Manual={manual}, Available={result.IsAvailable}, " +
+                $"Version={result.Asset?.Version.ToString() ?? "<none>"}.");
             _ = TryUpdateSettings(settings => settings.LastAutomaticUpdateCheckUtc = DateTimeOffset.UtcNow);
             if (!result.IsAvailable || result.Asset is null)
             {
@@ -9941,6 +9963,10 @@ public partial class MainWindow : Window
                 _ = TryUpdateSettings(settings => settings.SuppressedUpdateVersion = string.Empty);
             }
             RefreshOverviewAttention();
+            _diagnosticLog.Info(
+                $"Available update applied to overview state. Version={result.Asset.Version}, " +
+                $"Hidden={_startHidden}, Visible={IsVisible}, " +
+                $"Suppressed={string.Equals(_settings.SuppressedUpdateVersion, result.Asset.Version.ToString(), StringComparison.OrdinalIgnoreCase)}.");
             if (!manual && string.Equals(_settings.SuppressedUpdateVersion,
                     result.Asset.Version.ToString(), StringComparison.OrdinalIgnoreCase)) return;
             if (!manual) return;
@@ -9949,6 +9975,14 @@ public partial class MainWindow : Window
         catch (Exception exception)
         {
             _diagnosticLog.Warning("Update check failed.", exception);
+            if (!manual && !_exitRequested && !_automaticUpdateRetryScheduled)
+            {
+                _automaticUpdateRetryScheduled = true;
+                _diagnosticLog.Info(
+                    $"Automatic update check failed; scheduling one silent retry in " +
+                    $"{UpdateConfiguration.AutomaticRetryDelay.TotalSeconds:0} seconds.");
+                _ = RetryAutomaticUpdateCheckAsync();
+            }
             if (manual) ShowUpdateStatusDialog(T("UpdateCheckFailed"), exception.Message);
         }
         finally
@@ -9960,6 +9994,18 @@ public partial class MainWindow : Window
                 RefreshOverviewAttention();
             }
         }
+    }
+
+    private async Task RetryAutomaticUpdateCheckAsync()
+    {
+        await Task.Delay(UpdateConfiguration.AutomaticRetryDelay);
+        if (_exitRequested)
+        {
+            _diagnosticLog.Info("Automatic update retry skipped because application exit was requested.");
+            return;
+        }
+        _diagnosticLog.Info("Automatic update retry starting after the retry delay.");
+        await CheckForUpdatesAsync(manual: false);
     }
 
     private async Task HandleAvailableUpdateAsync(UpdateAsset asset)
@@ -10106,6 +10152,8 @@ public partial class MainWindow : Window
 
     private static void OpenGitHubRepository() =>
         _ = Process.Start(new ProcessStartInfo(UpdateConfiguration.RepositoryUrl) { UseShellExecute = true });
+
+    private void OpenGitHub_OnClick(object sender, RoutedEventArgs e) => OpenGitHubRepository();
 
     private enum UpdateDialogAction { Later, Install, GitHub }
     private sealed record UpdateDialogChoice(UpdateDialogAction Action, bool SuppressVersion);
@@ -12126,6 +12174,9 @@ public partial class MainWindow : Window
 
     private void RestoreFromTray()
     {
+        _diagnosticLog.Info(
+            $"Restoring main window from tray. AvailableUpdate={_availableUpdate?.Version.ToString() ?? "<none>"}, " +
+            $"ShimmerActive={_protectionSuggestionShimmerActive}, VisibleBefore={IsVisible}.");
         LogWindowAnimationState("restore-before");
         Opacity = 1;
         ShowActivated = true;

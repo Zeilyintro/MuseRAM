@@ -1,9 +1,12 @@
 namespace MuseRAM.Core;
 
-public sealed class OptimizationReboundTracker
+public static class ReboundObservationPolicy
 {
     public static readonly TimeSpan TrackingDuration = TimeSpan.FromSeconds(120);
+}
 
+public sealed class OptimizationReboundTracker
+{
     private ulong _baselineAvailableBytes;
     private long _netGainBytes;
     private DateTimeOffset? _trackingUntil;
@@ -17,7 +20,7 @@ public sealed class OptimizationReboundTracker
         _baselineAvailableBytes = before.AvailablePhysicalBytes;
         _netGainBytes = checked((long)after.AvailablePhysicalBytes - (long)before.AvailablePhysicalBytes);
         RatePercent = 0;
-        _trackingUntil = _netGainBytes > 0 ? startedAt + TrackingDuration : null;
+        _trackingUntil = _netGainBytes > 0 ? startedAt + ReboundObservationPolicy.TrackingDuration : null;
     }
 
     public double Observe(MemorySnapshot current, DateTimeOffset now)
@@ -44,7 +47,6 @@ public sealed record ApplicationReboundDetail(
 
 public sealed class ApplicationReboundDetailTracker
 {
-    public static readonly TimeSpan TrackingDuration = TimeSpan.FromSeconds(120);
     private readonly Dictionary<string, Observation> _observations = new(StringComparer.OrdinalIgnoreCase);
     private DateTimeOffset? _startedAt;
     private DateTimeOffset? _trackingUntil;
@@ -66,7 +68,7 @@ public sealed class ApplicationReboundDetailTracker
     {
         _observations.Clear();
         _startedAt = now;
-        _trackingUntil = now + TrackingDuration;
+        _trackingUntil = now + ReboundObservationPolicy.TrackingDuration;
         _completedAt = null;
     }
 
@@ -140,7 +142,10 @@ public sealed class ApplicationReboundDetailTracker
 
     public TimeSpan Elapsed(DateTimeOffset now) => !_startedAt.HasValue
         ? TimeSpan.Zero
-        : TimeSpan.FromSeconds(Math.Clamp((now - _startedAt.Value).TotalSeconds, 0, TrackingDuration.TotalSeconds));
+        : TimeSpan.FromSeconds(Math.Clamp(
+            (now - _startedAt.Value).TotalSeconds,
+            0,
+            ReboundObservationPolicy.TrackingDuration.TotalSeconds));
 
     private static ApplicationReboundDetail ToDetail(Observation observation) => new(
         observation.FamilyKey,

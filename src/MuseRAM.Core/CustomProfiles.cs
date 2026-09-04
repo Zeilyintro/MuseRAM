@@ -33,7 +33,7 @@ public sealed record ReboundBackoffSettings(
         double secondBackoffMinutes) => new(
             TimeSpan.FromSeconds(30),
             earlyPercent,
-            TimeSpan.FromSeconds(120),
+            ReboundObservationPolicy.TrackingDuration,
             latePercent,
             TimeSpan.FromMinutes(firstBackoffMinutes),
             TimeSpan.FromMinutes(secondBackoffMinutes));
@@ -434,6 +434,7 @@ public sealed record ApplicationStableLearningRecord(
     public int LastStableLaunchSampleCount { get; init; }
     public IReadOnlyList<ApplicationStableSample> StableSamples { get; init; } =
         Array.Empty<ApplicationStableSample>();
+    // Zero means this record has not established a formal anchor generation.
     public int AnchorGeneration { get; init; }
     public long AnchorGenerationBaselineBytes { get; init; }
     public int HistoricalReviewSuccessCount { get; init; }
@@ -445,7 +446,9 @@ public sealed record ApplicationStableSample(
     DateTimeOffset ObservedAt,
     string LaunchSignature,
     string RecoveryCycleId,
+    // Zero means this sample has not been assigned to a formal anchor generation.
     int Generation,
+    // High evidence remains outside the effective anchor until migration criteria are met.
     bool PendingHigh)
 {
     public long MinimumWorkingSetBytes { get; init; }
@@ -1549,7 +1552,7 @@ public sealed class ApplicationReboundBackoffTracker
 
                 var effectiveValidationUpperLimit = Math.Min(
                     validation.UpperLimitBytes,
-                    StableStateSuppressionPolicy.SuppressionLimitBytes(
+                    StableStateSuppressionPolicy.CalculateSuppressionLimit(
                         validation.StableBytes,
                         normalizedSuppressionSettings));
                 if (snapshot.WorkingSetBytes > effectiveValidationUpperLimit)
@@ -1750,7 +1753,7 @@ public sealed class ApplicationReboundBackoffTracker
                 growthValidation = growthValidation with { ContinuousStableSince = null };
                 var effectiveValidationUpperLimit = Math.Min(
                     growthValidation.UpperLimitBytes,
-                    StableStateSuppressionPolicy.SuppressionLimitBytes(
+                    StableStateSuppressionPolicy.CalculateSuppressionLimit(
                         growthValidation.StableBytes,
                         normalizedSuppressionSettings));
                 if (snapshot.WorkingSetBytes <= effectiveValidationUpperLimit)
@@ -1865,14 +1868,14 @@ public sealed class ApplicationReboundBackoffTracker
                     maximumStableSamplePool);
             var longTermReferenceLimit = existingRecord is null || suppressionSettings is null
                 ? null
-                : StableStateSuppressionPolicy.SuppressionLimitBytes(
+                : StableStateSuppressionPolicy.TryGetSuppressionLimit(
                     existingRecord,
                     normalizedSuppressionSettings,
                     now);
             var reference = convergedRuntimeReference ?? learnedReference;
             var referenceLimit = reference.HasValue && suppressionSettings is not null &&
                                  reference.Value <= normalizedSuppressionSettings.MaximumStableWorkingSetBytes
-                ? StableStateSuppressionPolicy.SuppressionLimitBytes(reference.Value, suppressionSettings)
+                ? StableStateSuppressionPolicy.CalculateSuppressionLimit(reference.Value, suppressionSettings)
                 : (long?)null;
             if (sameRuntimeLaunch &&
                 existingStatus is { State: ApplicationStableCandidateState.Converged } &&
@@ -2277,7 +2280,7 @@ public sealed class ApplicationReboundBackoffTracker
                 : null,
             familyScopeKey,
             familyScopeLaunchSignature,
-            StableStateSuppressionPolicy.SuppressionLimitBytes(stableBytes, settings),
+            StableStateSuppressionPolicy.CalculateSuppressionLimit(stableBytes, settings),
             familyScopeWorkingSetBytes,
             stableBytes,
             stableMinimumBytes,
@@ -2775,7 +2778,7 @@ public sealed class ApplicationReboundBackoffTracker
                 return bytes > long.MaxValue - total ? long.MaxValue : total + bytes;
             });
             var growthLimit = longTerm.BaselineWorkingSetBytes > 0
-                ? StableStateSuppressionPolicy.SuppressionLimitBytes(
+                ? StableStateSuppressionPolicy.CalculateSuppressionLimit(
                     longTerm.BaselineWorkingSetBytes,
                     growthSettings)
                 : long.MaxValue;

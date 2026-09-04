@@ -883,7 +883,7 @@ public sealed class MainWindowLayoutContractTests
             "private void RefreshBenefitLearningAnalysis",
             "private string ResolveLearningApplicationName");
         Assert.Contains(".Where(record => record.ValidSampleCount > 0)", refresh);
-        Assert.Contains("StableStateSuppressionPolicy.SuppressionLimitBytes", refresh);
+        Assert.Contains("StableStateSuppressionPolicy.CalculateSuppressionLimit", refresh);
         Assert.Contains("calculatedStableLimit =", refresh);
         Assert.Contains("effectiveAnchor.Value", refresh);
         Assert.DoesNotContain("StableReferenceAndProvisionalLimitFormat", refresh);
@@ -2552,7 +2552,7 @@ public sealed class MainWindowLayoutContractTests
         Assert.Contains("NaturalStableReviewComponentKeys", method);
         Assert.Contains("NaturalStableObservationComponentKeys", method);
         Assert.Contains("StableStateSuppressionPolicy.ActiveStableRecord(", method);
-        Assert.Contains("StableStateSuppressionPolicy.SuppressionLimitBytes(", method);
+        Assert.Contains("StableStateSuppressionPolicy.TryGetSuppressionLimit(", method);
         Assert.Contains("hasLongTermStableReference: hasLongTermStableReference", method);
         Assert.Contains("RetentionIconFor(indicator)", method);
 
@@ -2704,10 +2704,12 @@ public sealed class MainWindowLayoutContractTests
         Assert.True(settingsStart >= 0);
 
         var settings = layout[settingsStart..];
-        Assert.Contains("<StackPanel Grid.Row=\"2\" Margin=\"14,18,14,8\">", settings);
+        Assert.Contains("<Grid Grid.Row=\"2\" Margin=\"14,18,14,8\">", settings);
         Assert.Contains("x:Name=\"CurrentVersionText\"", settings);
         Assert.Contains("x:Name=\"LatestVersionText\"", settings);
         Assert.Contains("Text=\"{DynamicResource Tagline}\" Style=\"{StaticResource CaptionStyle}\"", settings);
+        Assert.Contains("Grid.Column=\"1\" Grid.RowSpan=\"2\"", settings);
+        Assert.Contains("Width=\"120\" HorizontalAlignment=\"Right\" VerticalAlignment=\"Center\"", settings);
         Assert.Contains("(_availableUpdate?.Version ?? AppVersion.Current).ToString()", File.ReadAllText(CodeFixturePath()));
         Assert.Contains("CurrentVersionText.Text = TF(\"CurrentVersion\", AppVersion.Current);", File.ReadAllText(CodeFixturePath()));
     }
@@ -3056,6 +3058,11 @@ public sealed class MainWindowLayoutContractTests
         Assert.Contains("asset.ReleaseNotes", dialog);
         Assert.Contains("if (!manual) return;", update);
         Assert.DoesNotContain("_automaticUpdatePromptShown", update);
+        Assert.Contains("UpdateConfiguration.FeedResponseTimeout", update);
+        Assert.Contains("_automaticUpdateRetryScheduled", update);
+        Assert.Contains("if (!manual && !_exitRequested && !_automaticUpdateRetryScheduled)", update);
+        Assert.Contains("RetryAutomaticUpdateCheckAsync();", update);
+        Assert.Contains("await Task.Delay(UpdateConfiguration.AutomaticRetryDelay);", code);
     }
 
     [Fact]
@@ -3504,7 +3511,7 @@ public sealed class MainWindowLayoutContractTests
     {
         var project = XDocument.Load(ProjectFixturePath());
 
-        Assert.Equal("0.1.7.8", project.Descendants("Version").Single().Value);
+        Assert.Equal("0.1.7.9", project.Descendants("Version").Single().Value);
     }
 
     [Fact]

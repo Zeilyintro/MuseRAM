@@ -2804,13 +2804,17 @@
                 </Border>
               </StackPanel>
             </Border>
-                <StackPanel Grid.Row="2" Margin="14,18,14,8">
+                <Grid Grid.Row="2" Margin="14,18,14,8">
+                  <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
+                  <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
                   <StackPanel Orientation="Horizontal">
                     <TextBlock x:Name="CurrentVersionText" FontWeight="SemiBold" />
                     <TextBlock x:Name="LatestVersionText" Margin="16,0,0,0" FontWeight="SemiBold" />
                   </StackPanel>
-                  <TextBlock Text="{DynamicResource Tagline}" Style="{StaticResource CaptionStyle}" Margin="0,4,0,0" TextWrapping="Wrap" />
-                </StackPanel>
+                  <TextBlock Grid.Row="1" Text="{DynamicResource Tagline}" Style="{StaticResource CaptionStyle}" Margin="0,4,0,0" TextWrapping="Wrap" />
+                  <Button Grid.Column="1" Grid.RowSpan="2" Style="{StaticResource CommandButtonStyle}" Content="{DynamicResource OpenGitHub}"
+                          Width="120" HorizontalAlignment="Right" VerticalAlignment="Center" Margin="16,0,0,0" Click="OpenGitHub_OnClick" />
+                </Grid>
               </Grid>
               <Border Grid.Column="2" Style="{StaticResource CardStyle}" VerticalAlignment="Top">
               <StackPanel>

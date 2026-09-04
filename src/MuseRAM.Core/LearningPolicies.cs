@@ -173,7 +173,7 @@ public static class StableStateSuppressionPolicy
         };
     }
 
-    public static long? SuppressionLimitBytes(
+    public static long? TryGetSuppressionLimit(
         ApplicationStableLearningRecord record,
         StableStateSuppressionSettings settings,
         DateTimeOffset now)
@@ -266,16 +266,16 @@ public static class StableStateSuppressionPolicy
                     anchorRecord,
                     settings.MaximumStableSamplePool) >= settings.MinimumSamples;
             var persistedLimit = fixedAnchorSupported
-                ? SuppressionLimitBytes(fixedAnchor!.FixedAnchorBytes, settings)
+                ? CalculateSuppressionLimit(fixedAnchor!.FixedAnchorBytes, settings)
                 : recordsByScope.TryGetValue(scopeKey, out var record)
-                    ? SuppressionLimitBytes(record, settings, now)
+                    ? TryGetSuppressionLimit(record, settings, now)
                     : null;
             var launchSignature = NaturalStableLaunchSignature(currentComponentKeys, components);
             long? runtimeLimit = !fixedAnchorSupported &&
                                  runtimeByScope.TryGetValue(scopeKey, out var runtime) &&
                                  runtime.CandidateBytes <= settings.MaximumStableWorkingSetBytes &&
                                  string.Equals(runtime.LaunchSignature, launchSignature, StringComparison.Ordinal)
-                ? SuppressionLimitBytes(runtime.CandidateBytes, settings)
+                ? CalculateSuppressionLimit(runtime.CandidateBytes, settings)
                 : null;
             // A persisted or fixed anchor is the user-visible suppression contract.
             // The current-launch runtime anchor is only a fallback while no eligible
@@ -410,7 +410,7 @@ public static class StableStateSuppressionPolicy
                nonIdleWorkingSet <= tolerance;
     }
 
-    public static long SuppressionLimitBytes(long referenceBytes, StableStateSuppressionSettings settings)
+    public static long CalculateSuppressionLimit(long referenceBytes, StableStateSuppressionSettings settings)
     {
         settings = settings.Normalize();
         var reference = Math.Max(0, referenceBytes);

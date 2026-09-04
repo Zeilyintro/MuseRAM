@@ -448,7 +448,7 @@ public sealed class StableStateSuppressionPolicyTests
         long currentWorkingSetBytes,
         StableStateSuppressionSettings settings,
         DateTimeOffset now) =>
-        StableStateSuppressionPolicy.SuppressionLimitBytes(record, settings, now) is { } limit &&
+        StableStateSuppressionPolicy.TryGetSuppressionLimit(record, settings, now) is { } limit &&
         Math.Max(0, currentWorkingSetBytes) <= limit;
 
     [Fact]
@@ -477,14 +477,14 @@ public sealed class StableStateSuppressionPolicyTests
             AbsoluteGrowthMarginBytes = 96 * mib
         };
 
-        Assert.Equal(296 * mib, StableStateSuppressionPolicy.SuppressionLimitBytes(StableRecord, balanced, Now));
+        Assert.Equal(296 * mib, StableStateSuppressionPolicy.TryGetSuppressionLimit(StableRecord, balanced, Now));
         Assert.Equal(
             450 * mib,
-            StableStateSuppressionPolicy.SuppressionLimitBytes(
+            StableStateSuppressionPolicy.TryGetSuppressionLimit(
                 StableRecordWith(280 * mib, 300 * mib, 320 * mib),
                 relativeDominates,
                 Now));
-        Assert.Null(StableStateSuppressionPolicy.SuppressionLimitBytes(
+        Assert.Null(StableStateSuppressionPolicy.TryGetSuppressionLimit(
             StableRecordWith(180 * mib, 220 * mib),
             balanced,
             Now));
@@ -502,9 +502,9 @@ public sealed class StableStateSuppressionPolicyTests
         };
 
         Assert.Equal(512 * mib,
-            StableStateSuppressionPolicy.SuppressionLimitBytes(StableRecord, settings, Now));
+            StableStateSuppressionPolicy.TryGetSuppressionLimit(StableRecord, settings, Now));
         Assert.Equal(512 * mib,
-            StableStateSuppressionPolicy.SuppressionLimitBytes(400 * mib, settings));
+            StableStateSuppressionPolicy.CalculateSuppressionLimit(400 * mib, settings));
     }
 
     [Fact]
@@ -1203,7 +1203,7 @@ public sealed class StableStateSuppressionPolicyTests
             Now,
             runtimeCandidates: new[] { runtime });
 
-        Assert.Equal(184 * mib, StableStateSuppressionPolicy.SuppressionLimitBytes(persisted, settings, Now));
+        Assert.Equal(184 * mib, StableStateSuppressionPolicy.TryGetSuppressionLimit(persisted, settings, Now));
         Assert.Empty(suppressed);
     }
 

@@ -63,7 +63,7 @@ public sealed class LocalSettings
     public bool ShowBuiltInStableStateSuppressionProfiles { get; set; } = true;
     public List<CustomStableStateSuppressionProfile> CustomStableStateSuppressionProfiles { get; set; } = new();
     public List<ApplicationStableAnchorSetting> StableAnchorSettings { get; set; } = new();
-    // Retained so schema 1-2 settings and downgrade builds can still read the last custom values.
+    // Downgrade-compatible mirror for schema 1-2 and fallback if a migrated custom profile cannot be resolved.
     public StableStateSuppressionSettings CustomStableStateSuppression { get; set; } =
         StableStateSuppressionSettings.For(OptimizationProfile.Turbo);
     public bool DiagnosticDataCollectionEnabled { get; set; }

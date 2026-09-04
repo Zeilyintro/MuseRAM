@@ -1829,6 +1829,13 @@ public sealed class UiLanguageCatalogTests
 
 public sealed class UpdateServicesTests
 {
+    [Fact]
+    public void AutomaticUpdateCheckUsesBoundedRetryTiming()
+    {
+        Assert.Equal(TimeSpan.FromSeconds(30), UpdateConfiguration.FeedResponseTimeout);
+        Assert.Equal(TimeSpan.FromSeconds(60), UpdateConfiguration.AutomaticRetryDelay);
+    }
+
     [Theory]
     [InlineData(UpdateCheckFrequency.EveryStartup, null, true)]
     [InlineData(UpdateCheckFrequency.Daily, 23, false)]

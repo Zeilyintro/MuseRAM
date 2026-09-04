@@ -20,6 +20,8 @@ public static class UpdateConfiguration
     public const string RepositoryUrl = "https://github.com/Zeilyintro/MuseRAM";
     public const string FeedUrl = "https://github.com/Zeilyintro/MuseRAM/releases/latest/download/update.json";
     public static readonly TimeSpan CacheLifetime = TimeSpan.FromDays(7);
+    public static readonly TimeSpan FeedResponseTimeout = TimeSpan.FromSeconds(30);
+    public static readonly TimeSpan AutomaticRetryDelay = TimeSpan.FromSeconds(60);
 }
 
 public static class UpdateCheckPolicy
