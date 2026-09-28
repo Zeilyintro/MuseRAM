@@ -11,6 +11,11 @@ public partial class App : System.Windows.Application
     private SingleInstanceGuard? _singleInstance;
     private SingleInstanceActivation? _singleInstanceActivation;
 
+    static App()
+    {
+        AppContext.SetSwitch("Switch.System.Windows.Input.Stylus.DisableStylusAndTouchSupport", true);
+    }
+
     protected override async void OnStartup(StartupEventArgs e)
     {
         base.OnStartup(e);

@@ -3511,7 +3511,7 @@ public sealed class MainWindowLayoutContractTests
     {
         var project = XDocument.Load(ProjectFixturePath());
 
-        Assert.Equal("0.1.7.9", project.Descendants("Version").Single().Value);
+        Assert.Equal("0.1.7.10", project.Descendants("Version").Single().Value);
     }
 
     [Fact]

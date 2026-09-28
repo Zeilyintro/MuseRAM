@@ -4,7 +4,9 @@
 
 MuseRAM is a memory management tool for Windows. It quietly observes system activity, helps identify background applications suitable for optimization, and reduces memory usage while minimizing disruption to your work.
 
-> Current version: `0.1.7.9`
+> Current version: `0.1.7.10`
+
+This update fixes an issue where MuseRAM could remain running after exiting from the system tray on some Windows input device setups.
 
 ![MuseRAM overview and candidate list](./docs/images/overview-dark.png)
 
