@@ -51,6 +51,7 @@ public sealed class ProcessSampler
                         continue;
                     }
                     var name = process.ProcessName;
+                    if (SystemProcessPolicy.IsAlwaysExcluded(name, null)) continue;
                     var pathStarted = Stopwatch.GetTimestamp();
                     var path = TryGetPath(process, out var usedMainModuleFallback);
                     var currentPathDuration = Stopwatch.GetElapsedTime(pathStarted);
@@ -119,7 +120,7 @@ public sealed class ProcessSampler
                         reliable,
                         idleScore,
                         startTimeFileTimeUtc,
-                        TryGetMainWindowTitle(process),
+                        windowState.HasVisibleWindow ? TryGetMainWindowTitle(process) : null,
                         windowState.HasMinimizedWindow,
                         lastForegroundAt)
                     {
@@ -358,7 +359,7 @@ public sealed class ProcessSampler
         }
     }
 
-    internal static string? ResolveProcessPath(int processId, Func<string?> primaryPathReader)
+    internal static string? ResolveProcessPath(int processId, Func<string?> primaryPathReader, int initialPathCapacity = 512)
     {
         ArgumentNullException.ThrowIfNull(primaryPathReader);
         var handle = NativeMethods.OpenProcess(
@@ -369,9 +370,17 @@ public sealed class ProcessSampler
         {
             try
             {
-                var path = new StringBuilder(32_768);
+                var path = new StringBuilder(initialPathCapacity);
                 var size = path.Capacity;
-                if (NativeMethods.QueryFullProcessImageName(handle, 0, path, ref size) && path.Length > 0)
+                var success = NativeMethods.QueryFullProcessImageName(handle, 0, path, ref size);
+                if (!success && Marshal.GetLastWin32Error() == 122) // ERROR_INSUFFICIENT_BUFFER
+                {
+                    path.Clear();
+                    path.EnsureCapacity(32_768);
+                    size = path.Capacity;
+                    success = NativeMethods.QueryFullProcessImageName(handle, 0, path, ref size);
+                }
+                if (success && path.Length > 0)
                     return path.ToString();
             }
             finally

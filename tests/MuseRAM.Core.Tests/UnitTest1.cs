@@ -24,6 +24,14 @@ public class ProcessSamplerTests
     }
 
     [Fact]
+    public void ProcessPathGrowsInsufficientBufferWithoutUsingFallback()
+    {
+        var path = ProcessSampler.ResolveProcessPath(Environment.ProcessId,
+            () => throw new InvalidOperationException("Unexpected fallback"), initialPathCapacity: 8);
+        Assert.Equal(Path.GetFullPath(Environment.ProcessPath!), Path.GetFullPath(path!), ignoreCase: true);
+    }
+
+    [Fact]
     public void ProcessPathFallsBackToMainModuleWhenLimitedQueryFails()
     {
         const string fallbackPath = @"C:\fallback\process.exe";

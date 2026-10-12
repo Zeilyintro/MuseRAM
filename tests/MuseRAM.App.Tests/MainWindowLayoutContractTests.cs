@@ -3032,11 +3032,11 @@ public sealed class MainWindowLayoutContractTests
         Assert.DoesNotContain("_settings.IntelligentCandidateSelection", optimization);
         Assert.DoesNotContain("PostTrimSamplingDelay(_settings.EnhancedSafety)", optimization);
         Assert.Contains("if (_state.IsBusy) return;", code);
-        Assert.Equal(12, CountOccurrences(code, "SetBusyState("));
+        Assert.Equal(10, CountOccurrences(code, "SetBusyState("));
     }
 
     [Fact]
-    public void UpdateFlowUsesTheSharedBusyWindow()
+    public void UpdateCheckDoesNotAcquireOptimizationBusyState()
     {
         var code = File.ReadAllText(CodeFixturePath());
         var update = MethodBody(code, "private async Task CheckForUpdatesAsync", "private async Task HandleAvailableUpdateAsync");
@@ -3044,9 +3044,13 @@ public sealed class MainWindowLayoutContractTests
         var dialog = MethodBody(code, "private UpdateDialogChoice ShowUpdateDialog", "private void ShowUpdateStatusDialog");
 
         var guard = update.IndexOf("if (_updateCheckInProgress || (manual && _state.IsBusy)) return;", StringComparison.Ordinal);
-        var setBusy = update.IndexOf("SetBusyState(true);", StringComparison.Ordinal);
+        var setBusy = update.IndexOf("CheckUpdateButton.IsEnabled = false;", StringComparison.Ordinal);
         var finallyBlock = update.IndexOf("finally", StringComparison.Ordinal);
-        var clearBusy = update.IndexOf("SetBusyState(false);", StringComparison.Ordinal);
+        var clearBusy = update.IndexOf("CheckUpdateButton.IsEnabled = true;", StringComparison.Ordinal);
+        Assert.DoesNotContain("SetBusyState(", update);
+        Assert.Contains("if (_state.IsBusy || _exitRequested) return;", install);
+        Assert.Contains("SetBusyState(true);", install);
+        Assert.Contains("if (!_exitRequested) SetBusyState(false);", install);
         Assert.True(guard >= 0);
         Assert.True(setBusy > guard);
         Assert.Contains("UpdateLauncher.LaunchReplacement(package);", install);
@@ -3511,7 +3515,7 @@ public sealed class MainWindowLayoutContractTests
     {
         var project = XDocument.Load(ProjectFixturePath());
 
-        Assert.Equal("0.1.7.10", project.Descendants("Version").Single().Value);
+        Assert.Equal("0.1.7.11", project.Descendants("Version").Single().Value);
     }
 
     [Fact]

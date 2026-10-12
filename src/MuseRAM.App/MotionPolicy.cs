@@ -14,6 +14,7 @@ public sealed class MotionPolicy : INotifyPropertyChanged
         ? (_reviewClock.Elapsed.TotalMilliseconds / 900d * 360d) % 360d
         : 0d;
 
+    private bool _windowVisible;
     private readonly Stopwatch _reviewClock = Stopwatch.StartNew();
     private readonly DispatcherTimer _reviewTimer;
 
@@ -25,18 +26,29 @@ public sealed class MotionPolicy : INotifyPropertyChanged
         };
         _reviewTimer.Tick += (_, _) =>
             PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(ReviewSpinnerAngle)));
-        if (IsEnabled) _reviewTimer.Start();
+        RefreshTimer();
         SystemParameters.StaticPropertyChanged += OnSystemParametersChanged;
     }
 
     public event PropertyChangedEventHandler? PropertyChanged;
 
+    public void SetWindowVisible(bool visible)
+    {
+        _windowVisible = visible;
+        RefreshTimer();
+    }
+
+    private void RefreshTimer()
+    {
+        if (IsEnabled && _windowVisible) _reviewTimer.Start();
+        else _reviewTimer.Stop();
+    }
+
     private void OnSystemParametersChanged(object? sender, PropertyChangedEventArgs e)
     {
         if (e.PropertyName == nameof(SystemParameters.ClientAreaAnimation))
         {
-            if (IsEnabled) _reviewTimer.Start();
-            else _reviewTimer.Stop();
+            RefreshTimer();
             PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(IsEnabled)));
             PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(ReviewSpinnerAngle)));
         }

@@ -238,6 +238,10 @@ public partial class MainWindow : Window
         _memoryTimer.Tick += (_, _) => RefreshMemoryMetrics();
         _actionCountdownTimer.Tick += (_, _) => UpdateActionCountdowns();
         _uiResponsivenessTimer.Tick += UiResponsivenessTimer_OnTick;
+        BenefitLearningPanel.IsVisibleChanged += (_, _) => RefreshBenefitLearningAnalysis();
+        IsVisibleChanged += (_, _) => RefreshSpinnerActivity();
+        Closed += (_, _) => MotionPolicy.Current.SetWindowVisible(false);
+        RefreshSpinnerActivity();
     }
 
     internal bool StartsHidden => _startHidden;
@@ -8904,7 +8908,9 @@ public partial class MainWindow : Window
         var row = _editingStableAnchorRow;
         if (row is null || string.IsNullOrWhiteSpace(row.ScopeKey)) return;
         var fixedMode = StableAnchorFixedButton.IsChecked == true;
-        var currentRow = _state.BenefitLearningRows.FirstOrDefault(candidate =>
+        // Validate against current backend data even when the displayed rows were deferred.
+        // Do not replace the bound collection here: that can close the editor and reset its draft.
+        var currentRow = CreateBenefitLearningRows().FirstOrDefault(candidate =>
             string.Equals(candidate.FamilyKey, row.FamilyKey, StringComparison.OrdinalIgnoreCase) &&
             string.Equals(candidate.ScopeKey, row.ScopeKey, StringComparison.OrdinalIgnoreCase));
         if (currentRow is null)
@@ -8974,6 +8980,19 @@ public partial class MainWindow : Window
 
     private void RefreshBenefitLearningAnalysis()
     {
+        // IsVisible includes the history page, full/compact shell and window visibility.
+        // A minimized WPF window can still report IsVisible, so check its state separately.
+        if (!BenefitLearningPanel.IsVisible || WindowState == WindowState.Minimized) return;
+
+        SynchronizeCollection(_state.BenefitLearningRows, CreateBenefitLearningRows());
+        ReviewProtectionSuggestionsButton.IsEnabled =
+            !_state.IsBusy && (_displayedProtectionSuggestions.Count > 0 || _currentProtectionSuggestions.Count > 0);
+    }
+
+    private IEnumerable<BenefitLearningRow> CreateBenefitLearningRows()
+    {
+        var learningRecords = _applicationBackoffTracker.LearningRecords;
+        var familyStableRecordsSnapshot = _applicationBackoffTracker.FamilyStableLearningRecords;
         var stableSettings = _settings.IntelligentCandidateSelection
             ? _settings.ResolveStableStateSuppressionSettings()
             : null;
@@ -8994,14 +9013,14 @@ public partial class MainWindow : Window
                 stableOptimizationSettings,
                 stableProtection,
                 _candidateIdleReadiness,
-                _applicationBackoffTracker.FamilyStableLearningRecords,
+                familyStableRecordsSnapshot,
                 _applicationBackoffTracker.NaturalStableScopeRequests(stableSnapshotObservedAt))
             .ToDictionary(snapshot => snapshot.ScopeKey, StringComparer.OrdinalIgnoreCase);
         var suggestionFamilies = _displayedProtectionSuggestions
             .Concat(_currentProtectionSuggestions)
             .Select(suggestion => suggestion.FamilyKey)
             .ToHashSet(StringComparer.OrdinalIgnoreCase);
-        var metrics = _applicationBackoffTracker.LearningRecords
+        var metrics = learningRecords
             .Where(record => record.ValidSampleCount > 0)
             .GroupBy(record => record.FamilyKey, StringComparer.OrdinalIgnoreCase)
             .Select(group =>
@@ -9009,7 +9028,7 @@ public partial class MainWindow : Window
                 var records = group.ToArray();
                 var runningFamily = _families.FirstOrDefault(family => string.Equals(
                     family.Key, group.Key, StringComparison.OrdinalIgnoreCase));
-                var familyStableRecords = _applicationBackoffTracker.FamilyStableLearningRecords
+                var familyStableRecords = familyStableRecordsSnapshot
                     .Where(record => string.Equals(
                         record.FamilyKey,
                         group.Key,
@@ -9439,9 +9458,7 @@ public partial class MainWindow : Window
             {
                 CurrentWorkingSetBytes = metric.CurrentWorkingSetBytes
             });
-        SynchronizeCollection(_state.BenefitLearningRows, rows);
-        ReviewProtectionSuggestionsButton.IsEnabled =
-            !_state.IsBusy && (_displayedProtectionSuggestions.Count > 0 || _currentProtectionSuggestions.Count > 0);
+        return rows;
     }
 
     private string ResolveLearningApplicationName(
@@ -9938,7 +9955,7 @@ public partial class MainWindow : Window
         }
 
         _updateCheckInProgress = true;
-        if (manual) SetBusyState(true);
+        CheckUpdateButton.IsEnabled = false;
         try
         {
             using var httpClient = new HttpClient { Timeout = UpdateConfiguration.FeedResponseTimeout };
@@ -9988,9 +10005,9 @@ public partial class MainWindow : Window
         finally
         {
             _updateCheckInProgress = false;
+            CheckUpdateButton.IsEnabled = true;
             if (manual && !_exitRequested)
             {
-                SetBusyState(false);
                 RefreshOverviewAttention();
             }
         }
@@ -10010,6 +10027,8 @@ public partial class MainWindow : Window
 
     private async Task HandleAvailableUpdateAsync(UpdateAsset asset)
     {
+        // A check can complete while an optimization is running; retain the overview notice.
+        if (_state.IsBusy || _exitRequested) return;
         var choice = ShowUpdateDialog(asset);
         if (choice.SuppressVersion)
         {
@@ -10022,6 +10041,7 @@ public partial class MainWindow : Window
             OpenGitHubRepository();
             return;
         }
+        if (_state.IsBusy || _exitRequested) return;
         if (choice.Action != UpdateDialogAction.Install)
         {
             RefreshOverviewAttention();
@@ -11915,9 +11935,14 @@ public partial class MainWindow : Window
 
     private void CloseButton_OnClick(object sender, RoutedEventArgs e) => Close();
 
+    private void RefreshSpinnerActivity() =>
+        MotionPolicy.Current.SetWindowVisible(IsVisible && WindowState != WindowState.Minimized);
+
     private void Window_OnStateChanged(object? sender, EventArgs e)
     {
+        RefreshSpinnerActivity();
         LogWindowAnimationState("state-changed");
+        if (BenefitLearningPanel is not null) RefreshBenefitLearningAnalysis();
         if (MaximizeRestoreButton is null) return;
         var isMaximized = WindowState == WindowState.Maximized;
         MaximizeRestoreButton.Content = isMaximized ? "\uE923" : "\uE922";
