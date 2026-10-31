@@ -2,13 +2,29 @@
 
 [简体中文](./README.md) | [English](./README.en.md)
 
+**A Windows memory manager for gamers and power users: see the memory pressure first, decide what to do about it, and get honest numbers on what actually changed.**
+
+[![Latest release](https://img.shields.io/github/v/release/Zeilyintro/MuseRAM)](https://github.com/Zeilyintro/MuseRAM/releases/latest)
+[![Downloads](https://img.shields.io/github/downloads/Zeilyintro/MuseRAM/total)](https://github.com/Zeilyintro/MuseRAM/releases)
+[![License](https://img.shields.io/github/license/Zeilyintro/MuseRAM)](./LICENSE)
+![Platform](https://img.shields.io/badge/platform-Windows%2010%20%7C%2011%20x64-blue)
+
+### [⬇ Download the latest release](https://github.com/Zeilyintro/MuseRAM/releases/latest)
+
 ![MuseRAM animated demo](./docs/images/museram-morph.gif)
 
-MuseRAM is a memory management tool for Windows. It quietly observes system activity, helps identify background applications suitable for optimization, and reduces memory usage while minimizing disruption to your work.
+MuseRAM quietly observes system activity, helps identify background applications suitable for optimization, and reduces memory usage while minimizing disruption to your work.
 
-> Current version: `0.1.7.11`
+## Why MuseRAM
 
-This update reduces MuseRAM's sampling and interface refresh overhead and fixes the Optimize Now button being disabled during update checks.
+- **No inflated numbers**: MuseRAM shows both the working-set reduction of processes and the real change in system-available memory, so you can judge whether an optimization actually mattered.
+- **Protection for what matters**: Games, creative tools, and work apps can be protected as a whole or by specific executables, and are never touched automatically.
+- **Every decision is visible**: The candidate list shows which applications are eligible for optimization, which are deferred, and why.
+- **Learns, with restraint**: It records how past optimizations performed for each app to inform later decisions. Settings and data stay on your machine.
+
+> MuseRAM has goals similar to [Mem Reduct](https://github.com/henrypp/memreduct) and other tools. Mem Reduct is a mature, lightweight open-source memory cleaner; MuseRAM takes a different approach with transparent candidate decisions, per-application protection, and honest reporting of optimization results. Choose whichever suits how you work.
+
+See the [CHANGELOG](./CHANGELOG.md) and [Releases](https://github.com/Zeilyintro/MuseRAM/releases) for recent changes.
 
 ![MuseRAM overview and candidate list](./docs/images/overview-dark.png)
 

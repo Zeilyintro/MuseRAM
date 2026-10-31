@@ -2,13 +2,29 @@
 
 [简体中文](./README.md) | [English](./README.en.md)
 
+**面向游戏玩家和进阶用户的 Windows 内存管理工具：先看清内存压力，再决定怎么处理，并如实展示优化的真实效果。**
+
+[![最新版本](https://img.shields.io/github/v/release/Zeilyintro/MuseRAM?label=%E6%9C%80%E6%96%B0%E7%89%88%E6%9C%AC)](https://github.com/Zeilyintro/MuseRAM/releases/latest)
+[![下载次数](https://img.shields.io/github/downloads/Zeilyintro/MuseRAM/total?label=%E4%B8%8B%E8%BD%BD)](https://github.com/Zeilyintro/MuseRAM/releases)
+[![许可证](https://img.shields.io/github/license/Zeilyintro/MuseRAM?label=%E8%AE%B8%E5%8F%AF%E8%AF%81)](./LICENSE)
+![平台](https://img.shields.io/badge/%E5%B9%B3%E5%8F%B0-Windows%2010%20%7C%2011%20x64-blue)
+
+### [⬇ 前往下载最新版本](https://github.com/Zeilyintro/MuseRAM/releases/latest)
+
 ![MuseRAM 动态演示](./docs/images/museram-morph.gif)
 
-MuseRAM 是一款面向 Windows 的内存管理工具。它会安静地观察系统状态，帮助你识别适合处理的后台应用，并在尽量不打扰当前工作的前提下进行内存优化。
+MuseRAM 会安静地观察系统状态，帮助你识别适合处理的后台应用，并在尽量不打扰当前工作的前提下进行内存优化。
 
-> 当前版本：`0.1.7.11`
+## 为什么选择 MuseRAM
 
-本次更新：降低程序自身的采样与界面刷新开销，并修复检查更新时“立即优化”按钮被禁用的问题。
+- **不夸大数字**：同时展示进程工作集的缩减，以及系统可用内存的真实变化，让你判断这次优化是否真的有意义。
+- **重要应用有保护**：游戏、创作和工作软件可以整体或按具体程序加入保护，不会被自动处理。
+- **每一步都能看懂**：候选列表会说明哪些应用可参与优化，以及哪些被暂缓、为什么暂缓。
+- **会学习，也很克制**：记录不同应用的历史优化收益，让后续判断更贴合你的实际使用；设置和数据全部保存在本机。
+
+> MuseRAM 与 [Mem Reduct](https://github.com/henrypp/memreduct) 等工具的目标相近。Mem Reduct 是成熟、轻量的开源内存清理工具；MuseRAM 的取向是更透明的候选判断、应用级保护，以及对优化效果的如实呈现。可以按自己的使用习惯选择。
+
+最新变更见 [CHANGELOG](./CHANGELOG.md) 与 [Releases](https://github.com/Zeilyintro/MuseRAM/releases)。
 
 ![MuseRAM 内存优化效果：系统情景模拟与单进程历史样例](./docs/images/optimization-effects.png)
 
